@@ -7,6 +7,8 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Collections;
 using RealAntennas.Network;
+using Contracts;
+using ContractConfigurator;
 
 namespace σκοπός {
   [KSPScenario(
@@ -49,6 +51,7 @@ namespace σκοπός {
       enabled = false;
       GameEvents.CommNet.OnNetworkInitialized.Add(NetworkInitializedNotify);
       GameEvents.Contract.onContractsLoaded.Add(NotifyContractsLoaded);
+      GameEvents.Contract.onContractsLoaded.Add(CleanMaintenanceContracts);
       StartCoroutine(CreateNetwork());
     }
 
@@ -58,10 +61,23 @@ namespace σκοπός {
       GameEvents.Contract.onAccepted.Remove(ReloadContractConnections);
       GameEvents.Contract.onFinished.Remove(ReloadContractConnections);    
       GameEvents.Contract.onContractsLoaded.Remove(NotifyContractsLoaded);
+      GameEvents.Contract.onContractsLoaded.Remove(CleanMaintenanceContracts);
     }
 
     private void NotifyContractsLoaded() {
       Log("Received OnContractsLoaded GameEvent notification");
+    }
+
+    private void CleanMaintenanceContracts() {
+      double now = Planetarium.GetUniversalTime();
+      var to_remove = ContractSystem.Instance.ContractsFinished.OfType<ConfiguredContract>()
+          .Where(cc => (cc.DateFinished + contract_cleanup_days_ * 86400.0 <= now) &&
+          (cc.contractType.name.StartsWith("maintenance_")) &&
+          (!cc.contractType.name.StartsWith("maintenance_intermittent_")) && // Experimental contracts do weird things if they're deleted.
+          (cc.Agent?.Name == "skopos_telecom_agent")).ToList();
+      foreach (ConfiguredContract contract in to_remove) {
+        ContractSystem.Instance.ContractsFinished.Remove(contract);
+      }
     }
 
     private void NetworkInitializedNotify() {
@@ -180,6 +196,7 @@ namespace σκοπός {
         // Time does not advance in the VAB, but after a revert, it is incorrectly stuck in the past.
         ut_ = Planetarium.GetUniversalTime();
       }
+      //Routing.link_stats = new Routing.LinkStatistics();
       network?.Refresh();
     }
 
@@ -226,6 +243,8 @@ namespace σκοπός {
     private double ut_;
     [KSPField(isPersistant = true)]
     internal double max_alert_rate_in_days_ = 0;
+    [KSPField(isPersistant = true)]
+    internal double contract_cleanup_days_ = 366;
     [KSPField(isPersistant = true)]
     public bool stop_warp_in_sim_ = true;
     [KSPField(isPersistant = true)]

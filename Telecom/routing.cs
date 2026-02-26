@@ -255,7 +255,7 @@ namespace σκοπός {
     }
     return new Circuit(forward[0], backward[0]);
   }
-
+    
   private PointToMultipointAvailability FindChannels(
       RACommNode source,
       IList<RACommNode> destinations,
@@ -291,7 +291,7 @@ namespace σκοπός {
     var previous = new Dictionary<RACommNode, OrientedLink>();
     var boundary = new PriorityQueue<RACommNode, double>();
     var interior = new HashSet<RACommNode>();
-
+    
     // Dijkstra’s algorithm without DecreaseKey.
     distances[source] = 0;
     boundary.Enqueue(source, 0);
@@ -428,242 +428,16 @@ namespace σκοπός {
         continue;
       }
 
-      double tx_node_penalty = heuristic.GetHeuristicDistance(tx, destination);
-
-      foreach (var stock_rx in tx.Keys) {
-        var rx = (RACommNode)stock_rx;
-
-        if (tx_only_.Contains(rx) || interior.Contains(rx) || !heuristic.IsGoodNode(rx)) {
-          continue;
-        }
-
-        double tentative_distance = distances[tx] + (tx.precisePosition - rx.precisePosition).magnitude + heuristic.GetHeuristicDistance(rx, destination) - tx_node_penalty; 
-        if (tentative_distance > latency_distance || 
-            (distances.TryGetValue(rx, out double d) &&
-            tentative_distance > d)) { // Latency optimality check
-          continue;
-        }
-
-        var link = OrientedLink.Get(this, from: tx, to: rx);
-        if (link.max_data_rate < data_rate) { // Best-case data rate check.
-          continue;
-        }
-
-        if (!link.CheckCapacityWithUsage(usage, data_rate)) {
-          continue;
-        }
-        distances[rx] = tentative_distance;
-        previous[rx] = link;
-        boundary.Enqueue(rx, tentative_distance);
-        if (rx == destination) latency_distance = tentative_distance; // Don't consider any links with no chance of improving our current solution.
-        //metrics.apsp_links_considered++;
-      }
-    }
-    channel = null;
-    return PointToMultipointAvailability.Unavailable;
-  }
-
-  private PointToMultipointAvailability TryShortestPath(
-      RACommNode source,
-      RACommNode destination,
-      double latency_limit,
-      double data_rate,
-      NetworkUsage usage,
-      out Channel channel) {
-    const double c = 299792458;
-    double latency_distance = c * latency_limit;
-    heuristic.GenerateShortestPaths();
-    channel = new Channel();
-    if (heuristic.GetHeuristicDistance(source, destination) > latency_distance) {
-      return PointToMultipointAvailability.Unavailable;
-    }
-    RACommNode prev = source;
-    var path = heuristic.BestRoute(source, destination);
-    
-    foreach (RACommNode node in path) {
-      var link = OrientedLink.Get(this, from: prev, to: node);
-      if (link.max_data_rate < data_rate) {
-        channel = null;
-        return PointToMultipointAvailability.Unavailable;
-      }
-      if (!link.CheckCapacityWithUsage(usage, data_rate)) {
-        channel = null;
-        return PointToMultipointAvailability.Unavailable;
-      }
-      channel.links.Add(link);
-      prev = node;
-    }
-    return PointToMultipointAvailability.Available;
-  }
-
-  private PointToMultipointAvailability FindChannelsOneHop(
-      RACommNode source,
-      RACommNode destination,
-      double latency_limit,
-      double data_rate,
-      NetworkUsage usage,
-      out Channel channel) {
-    const double c = 299792458;
-    double latency_distance = c * latency_limit;
-    channel = new Channel();
-    double best_distance = latency_distance;
-    foreach (RACommNode relay in source.Keys) {
-      if (relay.TryGetValue(destination, out var outbound)) {
-        OrientedLink outbound_link = OrientedLink.Get(this, from: relay, to: destination);
-        if (outbound_link.max_data_rate < data_rate) {
-          continue;
-        }
-
-        OrientedLink inbound_link = OrientedLink.Get(this, from: source, to: relay);
-        if (inbound_link.max_data_rate < data_rate) {
-          continue;
-        }
-
-        double distance = outbound_link.length + inbound_link.length;
-        if (distance > best_distance) {
-          continue;
-        }
-
-        if (!outbound_link.CheckCapacityWithUsage(usage, data_rate)) {
-          continue;
-        }
-
-        if (!inbound_link.CheckCapacityWithUsage(usage, data_rate)) {
-          continue;
-        }
-
-        best_distance = distance;
-        channel.links.Clear();
-        channel.links.Add(inbound_link);
-        channel.links.Add(outbound_link);
-      }
-    }
-    if (best_distance < latency_distance) {
-      return PointToMultipointAvailability.Available;
-    } else {
-      channel = null;
-      return PointToMultipointAvailability.Unavailable;
-    }
-  }
-
-  public class RoutingPrecompute {
-    // All-pairs shortest paths
-    //private ProfilerMarker profiler = new ProfilerMarker("Floyd-Warshall");
-
-    public void FindNodes(double bandwidth_filter = 1e2) {
-      apsp_watch_.Start();
-      var home_body = FlightGlobals.GetHomeBody();
-      nodes.Clear();
-
-      ordering.Clear();
-
-      foreach (RACommNode node in (CommNet.CommNetNetwork.Instance?.CommNet as RACommNetwork).Nodes) {
-        if ((node.ParentBody == home_body || node.ParentVessel?.mainBody == home_body) && 
-            node.RAAntennaList.Any(ra => ra.RFBand.ChannelWidth >= bandwidth_filter)) {
-          // Only consider ground stations and vessels with a wideband antenna on them.
-          ordering[node] = nodes.Count;
-          nodes.Add(node);
+        double tentative_distance = tx_distance + link.length;
+        if (!distances.TryGetValue(rx, out double d) ||
+            tentative_distance < d) {
+          distances[rx] = tentative_distance;
+          previous[rx] = link;
+          boundary.Enqueue(rx, tentative_distance);
         }
       }
-      apsp_watch_.Stop();
     }
-
-    public void OverrideNodes(List<RACommNode> nodes) {
-      this.nodes.Clear();
-      for (int i = 0; i < nodes.Count; ++i) {
-        this.nodes.Add(nodes[i]);
-        ordering[nodes[i]] = i;
-      }
-    }
-
-    public void GenerateShortestPaths(double minimum_link_data_rate = 1e3) {
-      if (cached) return;
-      if (nodes.Count == 0) FindNodes();
-      //profiler.Begin();
-      
-      //Telecom.Log($"Found {nodes.Count} relevant stations and vessels.");
-      apsp_watch_.Start();
-
-      int N = nodes.Count;
-      shortest_path = new double[N, N];
-      path_forwardtrace = new int[N, N];
-      for (int i = N - 1; i >= 0; --i) {
-        for (int j = N - 1; j >= 0; --j) {
-          shortest_path[i, j] = double.PositiveInfinity;
-          path_forwardtrace[i, j] = -1;
-        }
-        shortest_path[i, i] = 0;
-        path_forwardtrace[i, i] = i;
-        var tx = nodes[i];
-        foreach (RACommNode rx in tx.Keys) {
-          if (ordering.TryGetValue(rx, out int j) && ((RACommLink)tx[rx]).FwdDataRate > minimum_link_data_rate) {
-            shortest_path[i, j] = (tx.precisePosition - rx.precisePosition).magnitude; 
-            path_forwardtrace[i, j] = j;
-          }
-        }
-      }
-      for (int k = N - 1; k >= 0; --k) {
-        for (int i = N - 1; i >= 0; --i) {
-          if (shortest_path[i, k] != double.PositiveInfinity) {
-            for (int j = N - 1; j >= 0; --j) {
-              if (shortest_path[k, j] != double.PositiveInfinity && shortest_path[i, j] > shortest_path[i, k] + shortest_path[k, j]) {
-                shortest_path[i, j] = shortest_path[i, k] + shortest_path[k, j];
-                path_forwardtrace[i, j] = path_forwardtrace[i, k];
-              }
-            }
-          }
-        }
-      }
-      cached = true;
-      apsp_watch_.Stop();
-      metrics.apsp_runtime_ = apsp_watch_.ElapsedMilliseconds;
-      metrics.apsp_runs_++;
-      //profiler.End();
-    }
-    public double GetHeuristicDistance(RACommNode tx, RACommNode rx) {
-      if (ordering.TryGetValue(tx, out int i) && ordering.TryGetValue(rx, out int j)) {
-        return shortest_path[i, j];   
-      }
-      //Telecom.Log($"{tx.displayName} -> {rx.displayName} not in network!!");
-      return double.PositiveInfinity; // This is not in our "good" node network!
-    }
-
-    public bool IsGoodNode(RACommNode node) {
-      return ordering.ContainsKey(node);
-    }
-
-    public IEnumerable<RACommNode> BestRoute(RACommNode tx, RACommNode rx) {
-      // Skips yielding the first node (tx) for ease of implementation elsewhere.
-      if (ordering.TryGetValue(tx, out int i) && ordering.TryGetValue(rx, out int j) && path_forwardtrace[i, j] != -1) {
-        while (i != j) {
-          i = path_forwardtrace[i, j];
-          yield return nodes[i];
-        }
-      } 
-      yield break;
-    }
-
-    public void InvalidateCache() {
-      nodes.Clear();
-      ordering.Clear();
-      shortest_path = null;
-      path_forwardtrace = null;
-      cached = false;
-    }
-
-    private readonly Dictionary<RACommNode, int> ordering = new Dictionary<RACommNode, int>(256);
-    private readonly List<RACommNode> nodes = new List<RACommNode>();
-    private double[,] shortest_path;
-    private int[,] path_forwardtrace;
-    private bool cached = false;
-    public readonly APSPMetrics metrics = new APSPMetrics();
-    private readonly System.Diagnostics.Stopwatch apsp_watch_ = new System.Diagnostics.Stopwatch();
-    
-    public class APSPMetrics {
-      public int apsp_runs_ = 0;
-      public double apsp_runtime_ = 0;
-      public double AverageAPSPRuntime => apsp_runtime_ / apsp_runs_;
-    }
+    return rx_found == 0 ? Unavailable : Partial;
   }
 
   private class LinkUsage {
@@ -931,8 +705,6 @@ namespace σκοπός {
 
   private readonly Dictionary<(RACommNode, RACommNode), OrientedLink> links_ =
       new Dictionary<(RACommNode, RACommNode), OrientedLink>();
-
-  private readonly List<RACommNode> relay_vessels_ = new List<RACommNode>();
   
   // Stations only capable of transmitting.
   private HashSet<RACommNode> tx_only_ = new HashSet<RACommNode>();

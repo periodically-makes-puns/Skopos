@@ -10,8 +10,8 @@ namespace σκοπός {
       if (station_definition_cache_.ContainsKey(name)) {
         return station_definition_cache_[name];
       } else {
-      foreach (var block in GameDatabase.Instance.GetConfigs("skopos_telecom")) {
-        foreach (var definition in block.config.GetNodes("station")) {
+        foreach (var block in GameDatabase.Instance.GetConfigs("skopos_telecom")) {
+          foreach (var definition in block.config.GetNodes("station")) {
             var station_name = definition.GetValue("name");
             station_definition_cache_[station_name] = definition;
             if (station_name == name) {
@@ -27,8 +27,8 @@ namespace σκοπός {
       if (connection_definition_cache_.ContainsKey(name)) {
         return connection_definition_cache_[name];
       } else {
-      foreach (var block in GameDatabase.Instance.GetConfigs("skopos_telecom")) {
-        foreach (var definition in block.config.GetNodes("connection")) {
+        foreach (var block in GameDatabase.Instance.GetConfigs("skopos_telecom")) {
+          foreach (var definition in block.config.GetNodes("connection")) {
             var connection_name = definition.GetValue("name");
             connection_definition_cache_[connection_name] = definition;
             if (connection_name == name) {
@@ -193,7 +193,7 @@ namespace σκοπός {
       metrics.fixed_update_runtime_ = refresh_watch_.Elapsed.TotalMilliseconds;
       UnityEngine.Profiling.Profiler.EndSample();
     }
-
+    
     private void UpdateConnections() {
       var network = CommNet.CommNetNetwork.Instance?.CommNet as RACommNetwork;
       if (network == null) {
@@ -281,5 +281,6 @@ namespace σκοπός {
     public Dictionary<Contracts.Contract, List<Connection>> connections_by_contract  { get; } =
         new Dictionary<Contracts.Contract, List<Connection>>();
     public HashSet<Connection> contracted_connections { get; } = new HashSet<Connection>();
+
   }
 }

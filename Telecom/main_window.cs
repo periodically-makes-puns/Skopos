@@ -23,6 +23,10 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
       alert_rate_limit_text = telecom_.max_alert_rate_in_days_.ToString();
     }   // MainWindow initialization is before this field was loaded by the scenario.
 
+    if (string.IsNullOrEmpty(cleanup_days_text)) {
+      cleanup_days_text = telecom_.contract_cleanup_days_.ToString();
+    } // same with this one
+
     using (new UnityEngine.GUILayout.VerticalScope()) {
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         show_network = UnityEngine.GUILayout.Toggle(show_network, "Show network");
@@ -33,6 +37,13 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
         alert_rate_limit_text = UnityEngine.GUILayout.TextField(alert_rate_limit_text);
         double.TryParse(alert_rate_limit_text, out telecom_.max_alert_rate_in_days_);
         UnityEngine.GUILayout.Label($"days ({telecom_.max_alert_rate_in_days_})");
+      }
+
+      using (new UnityEngine.GUILayout.HorizontalScope()) {
+        UnityEngine.GUILayout.Label("Clean up (on scene change) maintenance contracts completed at least");
+        cleanup_days_text = UnityEngine.GUILayout.TextField(cleanup_days_text);
+        double.TryParse(cleanup_days_text, out telecom_.contract_cleanup_days_);
+        UnityEngine.GUILayout.Label($"days ago ({telecom_.contract_cleanup_days_})");
       }
 
       using (new UnityEngine.GUILayout.HorizontalScope()) {
@@ -53,6 +64,17 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
         UnityEngine.GUILayout.Label($"Fixed Updates: {telecom_.runtimeMetrics_.num_fixed_update_iterations_}");
         UnityEngine.GUILayout.Label($"Average Total Runtime: {telecom_.runtimeMetrics_.AverageFixedUpdateRuntime:F2} ms");
       }
+
+      //using (new UnityEngine.GUILayout.VerticalScope()) {
+      //  UnityEngine.GUILayout.Label($"Considered links: {Routing.link_stats.considered}");
+      //  UnityEngine.GUILayout.Label($"After Dijkstra filter: {Routing.link_stats.filter1}");
+      //  UnityEngine.GUILayout.Label($"After maxdatarate filter: {Routing.link_stats.filter2}");
+      //  UnityEngine.GUILayout.Label($"After distance filter: {Routing.link_stats.filter3}");
+      //  UnityEngine.GUILayout.Label($"After Rx bandwidth filter: {Routing.link_stats.filter4}");
+      //  UnityEngine.GUILayout.Label($"After Tx power filter: {Routing.link_stats.filter5}");
+      //  UnityEngine.GUILayout.Label($"After Tx bandwidth filter (taken): {Routing.link_stats.taken}");
+      //  UnityEngine.GUILayout.Label($"Maximum priority queue size: {Routing.link_stats.max_pq_size}");
+      //}
 
       var inspected_connections = connection_inspectors_.Keys.ToArray();
       foreach (var inspected_connection in inspected_connections) {
@@ -164,6 +186,7 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
 
   private Telecom telecom_;
   private string alert_rate_limit_text;
+  private string cleanup_days_text;
   private readonly Dictionary<Contracts.Contract, bool> open_contracts_ =
       new Dictionary<Contracts.Contract, bool>();
   private readonly Dictionary<Connection, ConnectionInspector> connection_inspectors_ =

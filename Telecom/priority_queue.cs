@@ -42,6 +42,8 @@ public class PriorityQueue<TElement, TPriority> {
     return false;
   }
 
+  public int Count() { return nodes_.Count; }
+
   // Inserts `node` on the path between the root and the node at `i`, at the
   // position determined by its priority, moving its children down.  This
   // operation overwrites the node at `i`.
