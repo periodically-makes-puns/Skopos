@@ -55,23 +55,16 @@ namespace σκοπός {
 
       public double power { get; private set; } = 0;
 
-      public void AddUsages(SingleUsage[] broadcast) {
-        power += (from usage in broadcast select usage.power).Max();
-        if (!(usages_ is null)) { // If this fails, we are a weak clone and should not bother tracking usage arrays.
+      public void AddUsages(SingleUsage[] broadcast, double multiplier = 1, bool fake = false) {
+        power += (from usage in broadcast select usage.power).Max() * multiplier;
+        if (!fake) {
           usages_.Add(broadcast);
-        } 
+        }
       }
 
       public PowerBreakdown Clone() {
         return new PowerBreakdown{
           usages_ = usages.Select(usages => usages.ToArray()).ToList(),
-          power = power,
-        };
-      }
-
-      public PowerBreakdown WeakClone() {
-        return new PowerBreakdown{
-          usages_ = null,
           power = power,
         };
       }
@@ -91,9 +84,10 @@ namespace σκοπός {
 
       public double spectrum { get; private set; } = 0;
 
-      public void AddUsages(SingleUsage[] usage) {
-        spectrum += usage[0].spectrum;
-        if (!(usages_ is null)) { // If this fails, we are a weak clone and should not bother tracking usage arrays.
+
+      public void AddUsages(SingleUsage[] usage, double multiplier = 1, bool fake = false) {
+        spectrum += usage[0].spectrum * multiplier;
+        if (!fake) {
           usages_.Add(usage);
         }
       }
@@ -101,13 +95,6 @@ namespace σκοπός {
       public SpectrumBreakdown Clone() {
         return new SpectrumBreakdown{
           usages_ = usages.Select(usages => usages.ToArray()).ToList(),
-          spectrum = spectrum
-        };
-      }
-
-      public SpectrumBreakdown WeakClone() {
-        return new SpectrumBreakdown{
-          usages_ = null,
           spectrum = spectrum
         };
       }
@@ -204,14 +191,14 @@ namespace σκοπός {
     if (circuit != null) {
       link_usage_metric.Start();
       foreach (OrientedLink link in circuit.forward.links) {
-        current_network_usage_.UseLinks(
-            new[] {new SourcedLink(connection, circuit.forward, link)},
+        current_network_usage_.UseLinkNoBroadcast(
+            new SourcedLink(connection, circuit.forward, link),
             one_way_data_rate);
       }
       foreach (OrientedLink link in circuit.backward.links) {
-        current_network_usage_.UseLinks(
-            new[] {new SourcedLink(connection, circuit.backward, link)},
-            one_way_data_rate);
+        current_network_usage_.UseLinkNoBroadcast(
+          new SourcedLink(connection, circuit.backward, link),
+          one_way_data_rate);
       }
       link_usage_metric.StopSuccess();
     }
@@ -253,7 +240,7 @@ namespace σκοπός {
           from link in channel.links
           group new SourcedLink(connection, channel, link) by link.tx_antenna;
       foreach (var links in links_by_tx_antenna) {
-        current_network_usage_.UseLinks(links, data_rate);
+        current_network_usage_.UseLinks(links.ToList(), data_rate);
       }
       link_usage_metric.StopSuccess();
     }
@@ -273,23 +260,31 @@ namespace σκοπός {
                      out Channel forward) == Unavailable) {
       return null;
     }
-    usage_clone_metric.Start();
-    var usage_with_forward_channel = new RoutingNetworkUsage(this, usage);
-    usage_clone_metric.StopSuccess();
-    link_usage_metric.Start();
+    fake_usage_metric.Start();
+    RoutingNetworkUsage current_usage = (usage != NetworkUsage.None) ? (RoutingNetworkUsage) usage : new RoutingNetworkUsage(this, usage);
     foreach (var link in forward.links) {
-      usage_with_forward_channel.UseLinks(new[]{link.Unsourced()},
-                                          one_way_data_rate);
+      current_usage.UseLinkNoBroadcast(link.Unsourced(), one_way_data_rate, multiplier: 1, fake: true);
     }
-    link_usage_metric.StopSuccess();
+    fake_usage_metric.Pause();
     if (FindChannel(destination,
                      source,
                      round_trip_latency_limit - forward.latency,
                      one_way_data_rate,
-                     usage_with_forward_channel,
+                     current_usage,
                      out Channel backward) == Unavailable) {
+        
+      fake_usage_metric.Resume();
+        foreach (var link in forward.links) {
+          current_usage.UseLinkNoBroadcast(link.Unsourced(), one_way_data_rate, multiplier: -1, fake: true);
+        }
+        fake_usage_metric.StopSuccess();
       return null;
     }
+    fake_usage_metric.Resume();
+    foreach (var link in forward.links) {
+        current_usage.UseLinkNoBroadcast(link.Unsourced(), one_way_data_rate, multiplier: -1, fake: true);
+      }
+      fake_usage_metric.StopSuccess();
     return new Circuit(forward, backward);
   }
 
@@ -326,21 +321,13 @@ namespace σκοπός {
       double data_rate,
       NetworkUsage usage,
       out Channel[] channels) {
-    find_channels_metric.Start();
-    if (prefer_one_bounce && destinations.Count == 1) {
-      Channel ans;
-      if (FindChannelsOneHop(source, destinations[0], latency_limit, data_rate, usage, out ans) == PointToMultipointAvailability.Available) {
-        channels = new Channel[1] {ans};
-        find_channels_metric.StopSuccess();
-        return PointToMultipointAvailability.Available;
-      }
-    }
-    if (use_apsp_heuristic && destinations.Count == 1) {
-      channels = new Channel[1] {null};
-      var res2 = FindChannelsAPSP(source, destinations[0], latency_limit, data_rate, usage, out channels[0]);
-      find_channels_metric.StopSuccess();
+    if (destinations.Count == 1) {
+      channels = new Channel[1];
+      var res2 = FindChannel(source, destinations[0], latency_limit, data_rate, usage, out channels[0]);
+      if (res2 == PointToMultipointAvailability.Unavailable) channels = null;
       return res2;
     }
+    find_channels_metric.Start();
     var res = FindChannelsDijkstras(source, destinations, latency_limit, data_rate, usage, out channels);
     find_channels_metric.StopSuccess();
     return res;
@@ -768,10 +755,10 @@ namespace σκοπός {
       if (other is RoutingNetworkUsage nontrival) {
         tx_power_usage_ = nontrival.tx_power_usage_.ToDictionary(
             entry => entry.Key,
-            entry => entry.Value.WeakClone());
+            entry => entry.Value.Clone());
         spectrum_usage_ = nontrival.spectrum_usage_.ToDictionary(
             entry => entry.Key,
-            entry => entry.Value.WeakClone());
+            entry => entry.Value.Clone());
       }
     } // Weakly clone (without usage details)
 
@@ -815,19 +802,28 @@ namespace σκοπός {
     // Uses tx power corresponding to broadcast at the given data rate along
     // all of these links (thus at the power needed for the weakest link).
     // Also uses the necessary spectrum on all antennas involved.
-    public void UseLinks(IEnumerable<SourcedLink> links,
-                         double data_rate) {
+    
+    // The multiplier and fake attributes exist for simulation purposes
+    // FindCircuit needs to act as if the forward links are already being used
+    // while routing the backward links.
+    // Therefore multiplier modifies the power/spectrum usage, and the fake flag indicates to not save the new usages
+    public void UseLinks(IList<SourcedLink> links,
+                         double data_rate,
+                         double multiplier = 1,
+                         bool fake = false) {
       EnsureSameTxAntennaAndTL(from sourced in links select sourced.link);
-      UseTxPower(links, data_rate);
-      UseSpectrum(links, data_rate);
+      UseTxPower(links, data_rate, multiplier, fake);
+      UseSpectrum(links, data_rate, multiplier, fake);
     }
 
-    private void UseTxPower(IEnumerable<SourcedLink> links,
-                            double data_rate) {
-      if (routing_.multiple_tracking_.Contains(links.First().link.tx)) {
+    private void UseTxPower(IList<SourcedLink> links,
+                            double data_rate,
+                            double multiplier = 1,
+                            bool fake = false) {
+      if (routing_.multiple_tracking_.Contains(links[0].link.tx)) {
         return;
       }
-      RealAntennaDigital tx_antenna = links.First().link.tx_antenna;
+      RealAntennaDigital tx_antenna = links[0].link.tx_antenna;
       if (!tx_power_usage_.ContainsKey(tx_antenna)) {
         tx_power_usage_.Add(tx_antenna, new PowerBreakdown());
       }
@@ -836,32 +832,34 @@ namespace σκοπός {
                         link = sourced,
                         power = sourced.link.TxPowerUsageFromDataRate(data_rate),
                     }).ToArray();
-      tx_power_usage_[tx_antenna].AddUsages(usages);
+      tx_power_usage_[tx_antenna].AddUsages(usages, multiplier, fake);
     }
 
-    private void UseSpectrum(IEnumerable<SourcedLink> links, double data_rate) {
-      SourcedLink first = links.First();
-      double usage = first.link.SpectrumUsageFromDataRate(data_rate);
-      foreach (var sourced in links.GroupBy(l => l.link.rx_antenna)) { // Wouldn't a duplicate here imply we have two links with the exact same TX and RX antenna?
-        var sourced_first = sourced.First();
-        RACommNode rx = sourced_first.link.rx;
-        RealAntennaDigital rx_antenna = sourced_first.link.rx_antenna;
-        if (routing_.multiple_tracking_.Contains(rx)) {
-          continue;
-        }
-        if (!spectrum_usage_.ContainsKey(rx_antenna)) {
-          spectrum_usage_.Add(rx_antenna, new SpectrumBreakdown());
-        }
-        spectrum_usage_[rx_antenna].AddUsages(
-            (from link in sourced select
+    private void UseSpectrum(IList<SourcedLink> links, 
+                            double data_rate,
+                            double multiplier = 1,
+                            bool fake = false) {
+      double usage = links[0].link.SpectrumUsageFromDataRate(data_rate);
+      
+      foreach (var sourced in links.GroupBy(l => l.link.rx_antenna)) { 
+        var usages = (from link in sourced select
                 new SpectrumBreakdown.SingleUsage{
                     link = link,
                     kind = SpectrumBreakdown.SingleUsage.Kind.Receive,
                     spectrum = link.link.SpectrumUsageFromDataRate(data_rate),
-            }).ToArray());
+            }).ToArray();
+        RACommNode rx = usages[0].link.link.rx;
+        if (routing_.multiple_tracking_.Contains(rx)) {
+          continue;
+        }
+        RealAntennaDigital rx_antenna = usages[0].link.link.rx_antenna;
+        if (!spectrum_usage_.ContainsKey(rx_antenna)) {
+          spectrum_usage_.Add(rx_antenna, new SpectrumBreakdown());
+        }
+        spectrum_usage_[rx_antenna].AddUsages(usages, multiplier, fake);
       }
-      RealAntennaDigital tx_antenna = first.link.tx_antenna;
-      if (routing_.multiple_tracking_.Contains(first.link.tx)) {
+      RealAntennaDigital tx_antenna = links[0].link.tx_antenna;
+      if (routing_.multiple_tracking_.Contains(links[0].link.tx)) {
         return;
       }
       if (!spectrum_usage_.ContainsKey(tx_antenna)) {
@@ -873,7 +871,52 @@ namespace σκοπός {
                 link = link,
                 kind = SpectrumBreakdown.SingleUsage.Kind.Transmit,
                 spectrum = usage,
-          }).ToArray());
+          }).ToArray(), multiplier, fake);
+    }
+
+    // Faster version of UseLinks optimized for single links.
+    public void UseLinkNoBroadcast(SourcedLink link, double data_rate, double multiplier = 1, bool fake = false) {
+      if (routing_.multiple_tracking_.Contains(link.link.tx)) {
+        return;
+      }
+      // Tx power
+      RealAntennaDigital tx_antenna = link.link.tx_antenna;
+      if (!tx_power_usage_.ContainsKey(tx_antenna)) {
+        tx_power_usage_.Add(tx_antenna, new PowerBreakdown());
+      }
+      tx_power_usage_[tx_antenna].AddUsages(new [] {
+        new PowerBreakdown.SingleUsage{
+                link = link,
+                power = link.link.TxPowerUsageFromDataRate(data_rate),
+      } }, multiplier, fake);
+
+      double spectrum_usage = link.link.SpectrumUsageFromDataRate(data_rate);
+      
+      // Rx spectrum
+      if (!routing_.multiple_tracking_.Contains(link.link.rx)) {
+        RealAntennaDigital rx_antenna = link.link.rx_antenna;
+        if (!spectrum_usage_.ContainsKey(rx_antenna)) {
+          spectrum_usage_.Add(rx_antenna, new SpectrumBreakdown());
+        }
+        spectrum_usage_[rx_antenna].AddUsages(new[] {
+          new SpectrumBreakdown.SingleUsage{
+                  link = link,
+                  kind = SpectrumBreakdown.SingleUsage.Kind.Receive,
+                  spectrum = spectrum_usage
+        } }, multiplier, fake);
+      }
+
+      if (!routing_.multiple_tracking_.Contains(link.link.tx)) {
+        if (!spectrum_usage_.ContainsKey(link.link.tx_antenna)) {
+          spectrum_usage_.Add(tx_antenna, new SpectrumBreakdown());
+        }
+        spectrum_usage_[tx_antenna].AddUsages(new[] {
+          new SpectrumBreakdown.SingleUsage{
+                  link = link,
+                  kind = SpectrumBreakdown.SingleUsage.Kind.Transmit,
+                  spectrum = spectrum_usage
+        } }, multiplier, fake);
+      }
     }
 
     private void EnsureSameTxAntennaAndTL(IEnumerable<OrientedLink> links) {
@@ -1035,7 +1078,7 @@ namespace σκοπός {
   internal FixedUpdateMetric shortest_path_metric = new FixedUpdateMetric("shortest-path");
   internal FixedUpdateMetric dijkstras_metric = new FixedUpdateMetric("dijkstras");
   internal static FixedUpdateMetric link_usage_metric = new FixedUpdateMetric("link-usage");
-  internal static FixedUpdateMetric usage_clone_metric = new FixedUpdateMetric("usage-clone");
+  internal static FixedUpdateMetric fake_usage_metric = new FixedUpdateMetric("usage-clone");
 }
 
 }

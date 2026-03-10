@@ -31,7 +31,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
     using (new UnityEngine.GUILayout.HorizontalScope()) { // the most bootleg table imaginable
       using (new UnityEngine.GUILayout.VerticalScope()) {
         string[] labels = { "Routing Stats", "Reset", "Precompute", "One-Hop", "Shortest Path", "A*", "Dijkstra's", "Channel Usage", 
-            "FindChannel total", "FindChannelDuplex", "FindChannelPTMP", "Kerbalism Consumption", "Avail. Reporting", "NetworkUsage cloning"};
+            "FindChannel total", "FindChannelDuplex", "FindChannelPTMP", "Kerbalism Consumption", "Avail. Reporting", "Fake Channel Usage"};
         foreach (string label in labels) {
           using (new UnityEngine.GUILayout.HorizontalScope()) {
             UnityEngine.GUILayout.FlexibleSpace();
@@ -52,7 +52,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         telecom_.network.routing_.find_channels_ptmp_metric,
         telecom_.network.kerbalism_consumption_metric,
         Service.service_availability_metric,
-        Routing.usage_clone_metric,
+        Routing.fake_usage_metric,
       };
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Total Calls");

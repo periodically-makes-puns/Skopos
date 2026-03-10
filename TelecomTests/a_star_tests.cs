@@ -338,6 +338,7 @@ namespace σκοπός {
             Routing.Channel[] channels;
             var result = routings[i].FindAndUseAvailableChannels(tx, rxs, latency_limit, data_rate, out channels, connection: null);
             Assert.AreEqual(baseline_result, result, $"Different availability for {s}");
+            if (baseline_result == Routing.PointToMultipointAvailability.Unavailable) continue;
             Assert.AreEqual(baseline?.Length, channels?.Length);
 
             for (int j = baseline.Length - 1; j >= 0; --j) {

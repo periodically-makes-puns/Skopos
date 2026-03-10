@@ -114,7 +114,7 @@ namespace σκοπός {
     private void RegisterStaticFixedUpdateMetrics() {
       RegisterFixedUpdateMetric(Service.service_availability_metric);
       RegisterFixedUpdateMetric(Routing.link_usage_metric);
-      RegisterFixedUpdateMetric(Routing.usage_clone_metric);
+      RegisterFixedUpdateMetric(Routing.fake_usage_metric);
     }
 
     internal void RegisterFixedUpdateMetric(FixedUpdateMetric metric) {
