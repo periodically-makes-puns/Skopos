@@ -50,6 +50,7 @@ namespace σκοπός {
       GameEvents.CommNet.OnNetworkInitialized.Add(NetworkInitializedNotify);
       GameEvents.Contract.onContractsLoaded.Add(NotifyContractsLoaded);
       StartCoroutine(CreateNetwork());
+      RegisterStaticFixedUpdateMetrics();
     }
 
     public void OnDestroy() {
@@ -108,6 +109,12 @@ namespace σκοπός {
       }
       network.ReloadContractConnections();
       on_contracts_changed_cr_running = false;
+    }
+
+    private void RegisterStaticFixedUpdateMetrics() {
+      RegisterFixedUpdateMetric(Service.service_availability_metric);
+      RegisterFixedUpdateMetric(Routing.link_usage_metric);
+      RegisterFixedUpdateMetric(Routing.usage_clone_metric);
     }
 
     internal void RegisterFixedUpdateMetric(FixedUpdateMetric metric) {
@@ -242,6 +249,6 @@ namespace σκοπός {
     private KSP.UI.Screens.ApplicationLauncherButton toolbar_button_;
 
     internal RuntimeMetrics runtimeMetrics_ = new RuntimeMetrics();
-    private readonly List<FixedUpdateMetric> registered_metrics = new List<FixedUpdateMetric>();
+    internal readonly List<FixedUpdateMetric> registered_metrics = new List<FixedUpdateMetric>();
   }
 }

@@ -45,6 +45,7 @@ namespace σκοπός {
     }
 
     public void AttemptConnection(Routing routing, Network network, double t) {
+      routing.find_channels_duplex_metric.Start();
       if (exclusive) {
         circuit = routing.FindAndUseAvailableCircuit(
             network.GetStation(trx_names[0]).Comm,
@@ -56,6 +57,7 @@ namespace σκοπός {
             network.GetStation(trx_names[1]).Comm,
             latency_limit, data_rate);
       }
+      routing.find_channels_duplex_metric.StopSuccess();
       basic_service.ReportAvailability(circuit != null, t);
       actual_latency = circuit?.round_trip_latency;
       foreach (var latency_service in improved_service_by_latency) {
@@ -125,6 +127,7 @@ namespace σκοπός {
       RACommNode[] rx = (from name in rx_names
                          select network.GetStation(name).Comm).ToArray();
       Routing.Channel[] channels;
+      routing.find_channels_ptmp_metric.Start();
       if (exclusive) {
         routing.FindAndUseAvailableChannels(
             tx, rx, latency_limit, data_rate, out channels, this);
@@ -132,6 +135,7 @@ namespace σκοπός {
         routing.FindChannelsInIsolation(
             tx, rx, latency_limit, data_rate, out channels);
       }
+      routing.find_channels_ptmp_metric.StopSuccess();
       for (int i = 0; i < channels.Length; ++i) {
         Routing.Channel channel = channels[i];
         channel_services[i].channel = channel;

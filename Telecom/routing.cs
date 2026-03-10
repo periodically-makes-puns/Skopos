@@ -57,12 +57,21 @@ namespace σκοπός {
 
       public void AddUsages(SingleUsage[] broadcast) {
         power += (from usage in broadcast select usage.power).Max();
-        usages_.Add(broadcast);
+        if (!(usages_ is null)) { // If this fails, we are a weak clone and should not bother tracking usage arrays.
+          usages_.Add(broadcast);
+        } 
       }
 
       public PowerBreakdown Clone() {
         return new PowerBreakdown{
           usages_ = usages.Select(usages => usages.ToArray()).ToList(),
+          power = power,
+        };
+      }
+
+      public PowerBreakdown WeakClone() {
+        return new PowerBreakdown{
+          usages_ = null,
           power = power,
         };
       }
@@ -84,12 +93,21 @@ namespace σκοπός {
 
       public void AddUsages(SingleUsage[] usage) {
         spectrum += usage[0].spectrum;
-        usages_.Add(usage);
+        if (!(usages_ is null)) { // If this fails, we are a weak clone and should not bother tracking usage arrays.
+          usages_.Add(usage);
+        }
       }
 
       public SpectrumBreakdown Clone() {
         return new SpectrumBreakdown{
           usages_ = usages.Select(usages => usages.ToArray()).ToList(),
+          spectrum = spectrum
+        };
+      }
+
+      public SpectrumBreakdown WeakClone() {
+        return new SpectrumBreakdown{
+          usages_ = null,
           spectrum = spectrum
         };
       }
@@ -130,12 +148,15 @@ namespace σκοπός {
 
   public Routing() {
     current_network_usage_ = new RoutingNetworkUsage(this);
-#if !DEBUG
-    Telecom.Instance.RegisterFixedUpdateMetric(one_hop_metric);
-    Telecom.Instance.RegisterFixedUpdateMetric(a_star_metric);
-    Telecom.Instance.RegisterFixedUpdateMetric(shortest_path_metric);
-    Telecom.Instance.RegisterFixedUpdateMetric(dijkstras_metric);
-#endif
+    Telecom.Instance?.RegisterFixedUpdateMetric(reset_metric);
+    Telecom.Instance?.RegisterFixedUpdateMetric(one_hop_metric);
+    Telecom.Instance?.RegisterFixedUpdateMetric(a_star_metric);
+    Telecom.Instance?.RegisterFixedUpdateMetric(shortest_path_metric);
+    Telecom.Instance?.RegisterFixedUpdateMetric(dijkstras_metric);
+    Telecom.Instance?.RegisterFixedUpdateMetric(link_usage_metric);
+    Telecom.Instance?.RegisterFixedUpdateMetric(find_channels_metric);
+    Telecom.Instance?.RegisterFixedUpdateMetric(find_channels_duplex_metric);
+    Telecom.Instance?.RegisterFixedUpdateMetric(find_channels_ptmp_metric);
   }
 
   public void Reset(IEnumerable<RACommNode> tx_only,
@@ -181,6 +202,7 @@ namespace σκοπός {
         one_way_data_rate,
         current_network_usage_);
     if (circuit != null) {
+      link_usage_metric.Start();
       foreach (OrientedLink link in circuit.forward.links) {
         current_network_usage_.UseLinks(
             new[] {new SourcedLink(connection, circuit.forward, link)},
@@ -191,6 +213,7 @@ namespace σκοπός {
             new[] {new SourcedLink(connection, circuit.backward, link)},
             one_way_data_rate);
       }
+      link_usage_metric.StopSuccess();
     }
     return circuit;
   }
@@ -224,6 +247,7 @@ namespace σκοπός {
         current_network_usage_,
         out channels);
     if (availability != Unavailable) {
+      link_usage_metric.Start();
       var links_by_tx_antenna =
           from channel in channels where channel != null
           from link in channel.links
@@ -231,6 +255,7 @@ namespace σκοπός {
       foreach (var links in links_by_tx_antenna) {
         current_network_usage_.UseLinks(links, data_rate);
       }
+      link_usage_metric.StopSuccess();
     }
     return availability;
   }
@@ -240,28 +265,58 @@ namespace σκοπός {
                               double round_trip_latency_limit,
                               double one_way_data_rate,
                               NetworkUsage usage) {
-    if (FindChannels(source,
-                     new[]{destination},
+    if (FindChannel(source,
+                     destination,
                      round_trip_latency_limit,
                      one_way_data_rate,
                      usage,
-                     out Channel[] forward) == Unavailable) {
+                     out Channel forward) == Unavailable) {
       return null;
     }
+    usage_clone_metric.Start();
     var usage_with_forward_channel = new RoutingNetworkUsage(this, usage);
-    foreach (var link in forward[0].links) {
+    usage_clone_metric.StopSuccess();
+    link_usage_metric.Start();
+    foreach (var link in forward.links) {
       usage_with_forward_channel.UseLinks(new[]{link.Unsourced()},
                                           one_way_data_rate);
     }
-    if (FindChannels(destination,
-                     new[]{source},
-                     round_trip_latency_limit - forward[0].latency,
+    link_usage_metric.StopSuccess();
+    if (FindChannel(destination,
+                     source,
+                     round_trip_latency_limit - forward.latency,
                      one_way_data_rate,
                      usage_with_forward_channel,
-                     out Channel[] backward) == Unavailable) {
+                     out Channel backward) == Unavailable) {
       return null;
     }
-    return new Circuit(forward[0], backward[0]);
+    return new Circuit(forward, backward);
+  }
+
+  private PointToMultipointAvailability FindChannel(
+      RACommNode source,
+      RACommNode destination,
+      double latency_limit,
+      double data_rate,
+      NetworkUsage usage,
+      out Channel channel) {
+    find_channels_metric.Start();
+    if (prefer_one_bounce) {
+      if (FindChannelsOneHop(source, destination, latency_limit, data_rate, usage, out channel) == PointToMultipointAvailability.Available) {
+        find_channels_metric.StopSuccess();
+        return PointToMultipointAvailability.Available;
+      }
+    }
+    if (use_apsp_heuristic) {
+      var res2 = FindChannelsAPSP(source, destination, latency_limit, data_rate, usage, out channel);
+      find_channels_metric.StopSuccess();
+      return res2;
+    }
+    Channel[] channels;
+    var res = FindChannelsDijkstras(source, new[] {destination}, latency_limit, data_rate, usage, out channels);
+    channel = channels[0];
+    find_channels_metric.StopSuccess();
+    return res;
   }
 
   private PointToMultipointAvailability FindChannels(
@@ -271,18 +326,24 @@ namespace σκοπός {
       double data_rate,
       NetworkUsage usage,
       out Channel[] channels) {
+    find_channels_metric.Start();
     if (prefer_one_bounce && destinations.Count == 1) {
       Channel ans;
       if (FindChannelsOneHop(source, destinations[0], latency_limit, data_rate, usage, out ans) == PointToMultipointAvailability.Available) {
         channels = new Channel[1] {ans};
+        find_channels_metric.StopSuccess();
         return PointToMultipointAvailability.Available;
       }
     }
     if (use_apsp_heuristic && destinations.Count == 1) {
       channels = new Channel[1] {null};
-      return FindChannelsAPSP(source, destinations[0], latency_limit, data_rate, usage, out channels[0]);
+      var res2 = FindChannelsAPSP(source, destinations[0], latency_limit, data_rate, usage, out channels[0]);
+      find_channels_metric.StopSuccess();
+      return res2;
     }
-    return FindChannelsDijkstras(source, destinations, latency_limit, data_rate, usage, out channels);
+    var res = FindChannelsDijkstras(source, destinations, latency_limit, data_rate, usage, out channels);
+    find_channels_metric.StopSuccess();
+    return res;
   }
 
   private PointToMultipointAvailability FindChannelsDijkstras(
@@ -576,7 +637,7 @@ namespace σκοπός {
     //private ProfilerMarker profiler = new ProfilerMarker("Floyd-Warshall");
 
     public RoutingPrecompute() {
-      Telecom.Instance.RegisterFixedUpdateMetric(apsp_metric);
+      Telecom.Instance?.RegisterFixedUpdateMetric(apsp_metric);
     }
 
     public void FindNodes(double bandwidth_filter = 1e2) {
@@ -707,12 +768,12 @@ namespace σκοπός {
       if (other is RoutingNetworkUsage nontrival) {
         tx_power_usage_ = nontrival.tx_power_usage_.ToDictionary(
             entry => entry.Key,
-            entry => entry.Value.Clone());
+            entry => entry.Value.WeakClone());
         spectrum_usage_ = nontrival.spectrum_usage_.ToDictionary(
             entry => entry.Key,
-            entry => entry.Value.Clone());
+            entry => entry.Value.WeakClone());
       }
-    }
+    } // Weakly clone (without usage details)
 
     public void Clear() {
       tx_power_usage_.Clear();
@@ -779,10 +840,12 @@ namespace σκοπός {
     }
 
     private void UseSpectrum(IEnumerable<SourcedLink> links, double data_rate) {
-      double usage = links.First().link.SpectrumUsageFromDataRate(data_rate);
-      foreach (var sourced in links.GroupBy(l => l.link.rx_antenna)) {
-        RACommNode rx = sourced.First().link.rx;
-        RealAntennaDigital rx_antenna = sourced.First().link.rx_antenna;
+      SourcedLink first = links.First();
+      double usage = first.link.SpectrumUsageFromDataRate(data_rate);
+      foreach (var sourced in links.GroupBy(l => l.link.rx_antenna)) { // Wouldn't a duplicate here imply we have two links with the exact same TX and RX antenna?
+        var sourced_first = sourced.First();
+        RACommNode rx = sourced_first.link.rx;
+        RealAntennaDigital rx_antenna = sourced_first.link.rx_antenna;
         if (routing_.multiple_tracking_.Contains(rx)) {
           continue;
         }
@@ -794,11 +857,11 @@ namespace σκοπός {
                 new SpectrumBreakdown.SingleUsage{
                     link = link,
                     kind = SpectrumBreakdown.SingleUsage.Kind.Receive,
-                    spectrum = usage,
+                    spectrum = link.link.SpectrumUsageFromDataRate(data_rate),
             }).ToArray());
       }
-      RealAntennaDigital tx_antenna = links.First().link.tx_antenna;
-      if (routing_.multiple_tracking_.Contains(links.First().link.tx)) {
+      RealAntennaDigital tx_antenna = first.link.tx_antenna;
+      if (routing_.multiple_tracking_.Contains(first.link.tx)) {
         return;
       }
       if (!spectrum_usage_.ContainsKey(tx_antenna)) {
@@ -963,10 +1026,16 @@ namespace σκοπός {
   private HashSet<RACommNode> multiple_tracking_ = new HashSet<RACommNode>();
 
   public readonly RoutingPrecompute heuristic = new RoutingPrecompute();
+  internal FixedUpdateMetric reset_metric = new FixedUpdateMetric("reset");
+  internal FixedUpdateMetric find_channels_metric = new FixedUpdateMetric("find-channels");
+  internal FixedUpdateMetric find_channels_duplex_metric = new FixedUpdateMetric("find-channels-duplex");
+  internal FixedUpdateMetric find_channels_ptmp_metric = new FixedUpdateMetric("find-channels-ptmp");
   internal FixedUpdateMetric one_hop_metric = new FixedUpdateMetric("one-hop");
   internal FixedUpdateMetric a_star_metric = new FixedUpdateMetric("astar");
   internal FixedUpdateMetric shortest_path_metric = new FixedUpdateMetric("shortest-path");
   internal FixedUpdateMetric dijkstras_metric = new FixedUpdateMetric("dijkstras");
+  internal static FixedUpdateMetric link_usage_metric = new FixedUpdateMetric("link-usage");
+  internal static FixedUpdateMetric usage_clone_metric = new FixedUpdateMetric("usage-clone");
 }
 
 }

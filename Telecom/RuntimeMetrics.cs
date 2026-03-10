@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 
 namespace σκοπός {
   internal class RuntimeMetrics {
@@ -11,49 +12,51 @@ namespace σκοπός {
 
   internal class FixedUpdateMetric {
     public FixedUpdateMetric(string name) { 
-      this.name = name;
-      watch = new Stopwatch();  
+      name_ = name;
+      watch_ = new Stopwatch();  
     }
 
     public void StartFixedUpdate() {
-      if (ticks_start_last_fixedupdate != watch.ElapsedTicks) fixedupdate_count++;
-      ticks_start_last_fixedupdate = watch.ElapsedTicks;
+      if (calls_this_fixedupdate > 0) fixedupdate_count_++;
+      ticks_start_last_fixedupdate_ = watch_.ElapsedTicks;
+      calls_this_fixedupdate = 0;
     }
 
     public void Start() {
       total_calls++;
       calls_this_fixedupdate++;
-      watch.Start();
+      watch_.Start();
     }
 
     public void Pause() {
-      watch.Stop();
+      watch_.Stop();
     }
 
     public void Resume() {
-      watch.Start();
+      watch_.Start();
     }
 
     public void StopSuccess() {
-      watch.Stop();
+      watch_.Stop();
       successes++;
     }
     public void StopFailure() {
-      watch.Stop();
+      watch_.Stop();
       failures++;
     }
 
     public long total_calls = 0;
     public long calls_this_fixedupdate = 0;
-    public long successes;
-    public long failures;
-    Stopwatch watch;
-    string name;
-    long ticks_start_last_fixedupdate = 0;
-    long fixedupdate_count = 0;
-    public double average_calls_per_fixedupdate => (double) total_calls / fixedupdate_count;
-    public double average_runtime_per_fixedupdate => (double) watch.ElapsedTicks / Stopwatch.Frequency / fixedupdate_count;
-    public double average_runtime_per_call => (double) watch.ElapsedTicks / Stopwatch.Frequency / total_calls;
-    public double average_runtime_this_fixedupdate => (double) (watch.ElapsedTicks - ticks_start_last_fixedupdate) / Stopwatch.Frequency / calls_this_fixedupdate;
+    public long successes = 0;
+    public long failures = 0;
+    Stopwatch watch_;
+    string name_;
+    long ticks_start_last_fixedupdate_ = 0;
+    long fixedupdate_count_ = 0;
+    public double average_calls_per_fixedupdate => (double) total_calls / fixedupdate_count_;
+    public double average_runtime_per_fixedupdate => (double) TimeSpan.FromTicks(watch_.ElapsedTicks).TotalSeconds / fixedupdate_count_;
+    public double average_runtime_per_call => (double) TimeSpan.FromTicks(watch_.ElapsedTicks).TotalSeconds / total_calls;
+    public double total_runtime_this_fixedupdate => (double) TimeSpan.FromTicks(watch_.ElapsedTicks - ticks_start_last_fixedupdate_).TotalSeconds;
+    public double average_runtime_this_fixedupdate => (double) TimeSpan.FromTicks(watch_.ElapsedTicks - ticks_start_last_fixedupdate_).TotalSeconds / calls_this_fixedupdate;
   }
 }

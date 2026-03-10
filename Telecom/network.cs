@@ -1,8 +1,8 @@
-﻿using RealAntennas;
+﻿using System.Collections.Generic;
+using System.Linq;
+using RealAntennas;
 using RealAntennas.MapUI;
 using RealAntennas.Network;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace σκοπός {
   public class Network {
@@ -45,6 +45,7 @@ namespace σκοπός {
         connections_[node.GetValue("name")].Load(node);
       }
       (CommNet.CommNetScenario.Instance as RACommNetScenario).Network.InvalidateCache();    // Inform RA of changes to the node list.
+      Telecom.Instance?.RegisterFixedUpdateMetric(kerbalism_consumption_metric);
     }
 
     public void Serialize(ConfigNode node) {
@@ -165,6 +166,7 @@ namespace σκοπός {
       var metrics = Telecom.Instance.runtimeMetrics_;
       refresh_watch_.Start();
       UpdateConnections();
+      kerbalism_consumption_metric.Start();
       foreach (RealAntennaDigital antenna in routing_.usage.Transmitters()) {
         if ((antenna?.ParentNode as RACommNode).ParentVessel is Vessel vessel) {
           Kerbalism.ConsumeResource(
@@ -175,6 +177,7 @@ namespace σκοπός {
               "Σκοπός telecom");
         }
       }
+      kerbalism_consumption_metric.StopSuccess();
       refresh_watch_.Stop();
       metrics.num_fixed_update_iterations_++;
       metrics.fixed_update_runtime_ = refresh_watch_.Elapsed.TotalMilliseconds;
@@ -189,14 +192,15 @@ namespace σκοπός {
       }
       routing_.prefer_one_bounce = Telecom.Instance.prefer_one_bounce;
       routing_.use_apsp_heuristic = Telecom.Instance.use_apsp_heuristic;
+      routing_.reset_metric.Start();
       routing_.Reset(
           from station in tx_only_ select station.Comm,
           from station in rx_only_ select station.Comm,
           from station in stations_.Values select station.Comm);
-      foreach (var connection in connections_.Values) {
-        if (contracted_connections.Contains(connection)) {
-          connection.AttemptConnection(routing_, this, Telecom.Instance.last_universal_time);
-        }
+      routing_.reset_metric.StopSuccess();
+      
+      foreach (var connection in contracted_connections) {
+        connection.AttemptConnection(routing_, this, Telecom.Instance.last_universal_time);
       }
     }
 
@@ -251,5 +255,7 @@ namespace σκοπός {
     public Dictionary<Contracts.Contract, List<Connection>> connections_by_contract  { get; } =
         new Dictionary<Contracts.Contract, List<Connection>>();
     public HashSet<Connection> contracted_connections { get; } = new HashSet<Connection>();
+
+    internal FixedUpdateMetric kerbalism_consumption_metric = new FixedUpdateMetric("kerbalism");
   }
 }

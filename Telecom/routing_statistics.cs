@@ -13,6 +13,16 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
 
   protected override string Title => "Σκοπός Telecom routing statistics";
 
+  public static string short_time_to_string(double time) {
+    if (time >= 1) {
+      return $"{time:F3} s";
+    } else if (time >= 0.000001) {
+      return $"{time * 1000:F3} ms";
+    } else {
+      return $"{time * 1000000:F3} μs";
+    }
+  }
+
   protected override void RenderWindowContents(int window_id) {
     if (!telecom_.enabled || telecom_.network == null) {
       UnityEngine.GUILayout.Label("Please wait for the Σκοπός Telecom network to initialize...");
@@ -20,7 +30,8 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
     }
     using (new UnityEngine.GUILayout.HorizontalScope()) { // the most bootleg table imaginable
       using (new UnityEngine.GUILayout.VerticalScope()) {
-        string[] labels = { "Routing Stats", "Precompute", "One-Hop", "Shortest Path", "A*", "Dijkstra's"};
+        string[] labels = { "Routing Stats", "Reset", "Precompute", "One-Hop", "Shortest Path", "A*", "Dijkstra's", "Channel Usage", 
+            "FindChannel total", "FindChannelDuplex", "FindChannelPTMP", "Kerbalism Consumption", "Avail. Reporting", "NetworkUsage cloning"};
         foreach (string label in labels) {
           using (new UnityEngine.GUILayout.HorizontalScope()) {
             UnityEngine.GUILayout.FlexibleSpace();
@@ -29,11 +40,19 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         }
       }
       FixedUpdateMetric[] metrics = { 
+        telecom_.network.routing_.reset_metric, 
         telecom_.network.routing_.heuristic.apsp_metric, 
         telecom_.network.routing_.one_hop_metric,
         telecom_.network.routing_.shortest_path_metric,
         telecom_.network.routing_.a_star_metric,
         telecom_.network.routing_.dijkstras_metric,
+        Routing.link_usage_metric,
+        telecom_.network.routing_.find_channels_metric,
+        telecom_.network.routing_.find_channels_duplex_metric,
+        telecom_.network.routing_.find_channels_ptmp_metric,
+        telecom_.network.kerbalism_consumption_metric,
+        Service.service_availability_metric,
+        Routing.usage_clone_metric,
       };
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Total Calls");
@@ -54,23 +73,27 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
-        UnityEngine.GUILayout.Label("Avg. Calls", principia.ksp_plugin_adapter.Style.Error(UnityEngine.GUI.skin.label));
+        UnityEngine.GUILayout.Label("Avg. Calls");
         foreach (FixedUpdateMetric metric in metrics) {
-          UnityEngine.GUILayout.Label($"{metric.average_calls_per_fixedupdate:F2}");
+          UnityEngine.GUILayout.Label($"{metric.average_calls_per_fixedupdate:F3}");
         }
       }
-
-
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Avg. Time/Call");
         foreach (FixedUpdateMetric metric in metrics) {
-          UnityEngine.GUILayout.Label($"{metric.average_runtime_per_call*1000:F2} ms");
+          UnityEngine.GUILayout.Label($"{short_time_to_string(metric.average_runtime_per_call)}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Avg. Time Total");
         foreach (FixedUpdateMetric metric in metrics) {
-          UnityEngine.GUILayout.Label($"{metric.average_runtime_per_fixedupdate*1000:F2} ms");
+          UnityEngine.GUILayout.Label($"{short_time_to_string(metric.average_runtime_per_fixedupdate)}");
+        }
+      }
+      using (new UnityEngine.GUILayout.VerticalScope()) {
+        UnityEngine.GUILayout.Label("Last Time Total");
+        foreach (FixedUpdateMetric metric in metrics) {
+          UnityEngine.GUILayout.Label($"{short_time_to_string(metric.total_runtime_this_fixedupdate)}");
         }
       }
     }
