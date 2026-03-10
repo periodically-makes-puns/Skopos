@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using RealAntennas;
 
 namespace σκοπός {
 internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindowRenderer {
@@ -29,31 +30,33 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
       return;
     }
     using (new UnityEngine.GUILayout.HorizontalScope()) { // the most bootleg table imaginable
-      using (new UnityEngine.GUILayout.VerticalScope()) {
-        string[] labels = { "Routing Stats", "Reset", "Precompute", "One-Hop", "Shortest Path", "A*", "Dijkstra's", "Channel Usage", 
-            "FindChannel total", "FindChannelDuplex", "FindChannelPTMP", "Kerbalism Consumption", "Avail. Reporting", "Fake Channel Usage"};
-        foreach (string label in labels) {
-          using (new UnityEngine.GUILayout.HorizontalScope()) {
-            UnityEngine.GUILayout.FlexibleSpace();
-            UnityEngine.GUILayout.Label(label);
-          }
-        }
-      }
       FixedUpdateMetric[] metrics = { 
+        telecom_.network.routing_.find_channels_duplex_metric,
+        telecom_.network.routing_.find_channels_ptmp_metric,
         telecom_.network.routing_.reset_metric, 
         telecom_.network.routing_.heuristic.apsp_metric, 
         telecom_.network.routing_.one_hop_metric,
         telecom_.network.routing_.shortest_path_metric,
         telecom_.network.routing_.a_star_metric,
         telecom_.network.routing_.dijkstras_metric,
-        Routing.link_usage_metric,
         telecom_.network.routing_.find_channels_metric,
-        telecom_.network.routing_.find_channels_duplex_metric,
-        telecom_.network.routing_.find_channels_ptmp_metric,
+        Routing.link_usage_metric,
+        Routing.fake_usage_metric,
         telecom_.network.kerbalism_consumption_metric,
         Service.service_availability_metric,
-        Routing.fake_usage_metric,
       };
+      using (new UnityEngine.GUILayout.VerticalScope()) {
+        using (new UnityEngine.GUILayout.HorizontalScope()) {
+          UnityEngine.GUILayout.FlexibleSpace();
+          UnityEngine.GUILayout.Label("Timing Statistics");
+        }
+        foreach (FixedUpdateMetric metric in metrics) {
+          using (new UnityEngine.GUILayout.HorizontalScope()) {
+            UnityEngine.GUILayout.FlexibleSpace();
+            UnityEngine.GUILayout.Label(metric.name);
+          }
+        }
+      }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Total Calls");
         foreach (FixedUpdateMetric metric in metrics) {
@@ -76,6 +79,12 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         UnityEngine.GUILayout.Label("Avg. Calls");
         foreach (FixedUpdateMetric metric in metrics) {
           UnityEngine.GUILayout.Label($"{metric.average_calls_per_fixedupdate:F3}");
+        }
+      }
+      using (new UnityEngine.GUILayout.VerticalScope()) {
+        UnityEngine.GUILayout.Label("Calls This Frame");
+        foreach (FixedUpdateMetric metric in metrics) {
+          UnityEngine.GUILayout.Label($"{metric.calls_this_fixedupdate}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {

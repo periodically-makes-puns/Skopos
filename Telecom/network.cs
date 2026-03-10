@@ -256,6 +256,6 @@ namespace σκοπός {
         new Dictionary<Contracts.Contract, List<Connection>>();
     public HashSet<Connection> contracted_connections { get; } = new HashSet<Connection>();
 
-    internal FixedUpdateMetric kerbalism_consumption_metric = new FixedUpdateMetric("kerbalism");
+    internal FixedUpdateMetric kerbalism_consumption_metric = new FixedUpdateMetric("Kerbalism EC Consumption");
   }
 }

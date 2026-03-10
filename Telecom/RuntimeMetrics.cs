@@ -12,7 +12,7 @@ namespace σκοπός {
 
   internal class FixedUpdateMetric {
     public FixedUpdateMetric(string name) { 
-      name_ = name;
+      this.name = name;
       watch_ = new Stopwatch();  
     }
 
@@ -50,7 +50,7 @@ namespace σκοπός {
     public long successes = 0;
     public long failures = 0;
     Stopwatch watch_;
-    string name_;
+    public string name;
     long ticks_start_last_fixedupdate_ = 0;
     long fixedupdate_count_ = 0;
     public double average_calls_per_fixedupdate => (double) total_calls / fixedupdate_count_;

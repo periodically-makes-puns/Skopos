@@ -732,7 +732,7 @@ namespace σκοπός {
     private double[,] shortest_path;
     private int[,] path_forwardtrace;
     private bool cached = false;
-    internal FixedUpdateMetric apsp_metric = new FixedUpdateMetric("apsp");
+    internal FixedUpdateMetric apsp_metric = new FixedUpdateMetric("Floyd-Warshall");
   }
 
   private class LinkUsage {
@@ -1069,16 +1069,16 @@ namespace σκοπός {
   private HashSet<RACommNode> multiple_tracking_ = new HashSet<RACommNode>();
 
   public readonly RoutingPrecompute heuristic = new RoutingPrecompute();
-  internal FixedUpdateMetric reset_metric = new FixedUpdateMetric("reset");
-  internal FixedUpdateMetric find_channels_metric = new FixedUpdateMetric("find-channels");
-  internal FixedUpdateMetric find_channels_duplex_metric = new FixedUpdateMetric("find-channels-duplex");
-  internal FixedUpdateMetric find_channels_ptmp_metric = new FixedUpdateMetric("find-channels-ptmp");
-  internal FixedUpdateMetric one_hop_metric = new FixedUpdateMetric("one-hop");
-  internal FixedUpdateMetric a_star_metric = new FixedUpdateMetric("astar");
-  internal FixedUpdateMetric shortest_path_metric = new FixedUpdateMetric("shortest-path");
-  internal FixedUpdateMetric dijkstras_metric = new FixedUpdateMetric("dijkstras");
-  internal static FixedUpdateMetric link_usage_metric = new FixedUpdateMetric("link-usage");
-  internal static FixedUpdateMetric fake_usage_metric = new FixedUpdateMetric("usage-clone");
+  internal FixedUpdateMetric reset_metric = new FixedUpdateMetric("Reset");
+  internal FixedUpdateMetric find_channels_metric = new FixedUpdateMetric("Find Channels");
+  internal FixedUpdateMetric find_channels_duplex_metric = new FixedUpdateMetric("Find Channels (Duplex)");
+  internal FixedUpdateMetric find_channels_ptmp_metric = new FixedUpdateMetric("Find Channels (PtMP)");
+  internal FixedUpdateMetric one_hop_metric = new FixedUpdateMetric("One-Hop");
+  internal FixedUpdateMetric a_star_metric = new FixedUpdateMetric("A*");
+  internal FixedUpdateMetric shortest_path_metric = new FixedUpdateMetric("Shortest Path");
+  internal FixedUpdateMetric dijkstras_metric = new FixedUpdateMetric("Dijkstra's");
+  internal static FixedUpdateMetric link_usage_metric = new FixedUpdateMetric("UseLinks/UseLink");
+  internal static FixedUpdateMetric fake_usage_metric = new FixedUpdateMetric("Fake UseLinks");
 }
 
 }
