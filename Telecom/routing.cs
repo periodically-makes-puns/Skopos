@@ -571,17 +571,17 @@ namespace σκοπός {
     heuristic.GenerateShortestPaths();
     power_efficient_metric.Resume();
 
-    distances[source] = (0, 0, heuristic.GetHeuristicDistance(source, destination));
+    distances[source] = (double.NegativeInfinity, double.NegativeInfinity, heuristic.GetHeuristicDistance(source, destination));
     boundary.Enqueue(source, distances[source]);
     previous[source] = null;
-    distances[destination] = (double.PositiveInfinity, double.PositiveInfinity, latency_distance);
+    distances[destination] = (0, 0, latency_distance);
     channel = null;
     while (boundary.TryDequeue(out RACommNode tx, out (double, double, double) weight_tuple)) {
       if (weight_tuple != distances[tx]) {
         continue;
       }
-      double tx_efficiency = weight_tuple.Item1;
-      double tx_freeness = weight_tuple.Item2;
+      double tx_efficiency = -weight_tuple.Item1;
+      double tx_freeness = -weight_tuple.Item2;
       double tx_distance = weight_tuple.Item3;
       if (tx == destination) {
         channel = new Channel();
@@ -619,11 +619,13 @@ namespace σκοπός {
         if (capacity < data_rate) {
           continue;
         }
-        double rx_efficiency = tx_efficiency + 1.0 / link.max_data_rate;
-        double rx_freeness = tx_freeness + 1.0 / capacity;
+        double this_efficiency = link.max_data_rate;
+        double rx_efficiency = (tx_efficiency > this_efficiency) ? this_efficiency : tx_efficiency;
+        double this_freeness = capacity;
+        double rx_freeness = (tx_freeness > this_freeness) ? this_freeness : tx_freeness;
 
         double tentative_distance = tx_distance + (tx.precisePosition - rx.precisePosition).magnitude + heuristic.GetHeuristicDistance(rx, destination) - tx_node_penalty; 
-        (double, double, double) rx_weight_tuple = (rx_efficiency, rx_freeness, tentative_distance);
+        (double, double, double) rx_weight_tuple = (-rx_efficiency, -rx_freeness, tentative_distance);
         if (tentative_distance > latency_distance || 
             (distances.TryGetValue(rx, out (double, double, double) p) && rx_weight_tuple.CompareTo(p) > 0) ||
             rx_weight_tuple.CompareTo(distances[destination]) > 0) { // If we cannot improve the destination, there is no point! 

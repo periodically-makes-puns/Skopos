@@ -8,7 +8,6 @@ using RealAntennas;
 namespace σκοπός {
 internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindowRenderer {
   public RoutingStatistics(Telecom telecom) : base(telecom){
-    Hide();
     telecom_ = telecom;
   }
 
