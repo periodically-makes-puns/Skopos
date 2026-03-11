@@ -9,6 +9,7 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
   public MainWindow(Telecom telecom) : base(telecom) {
     telecom_ = telecom;
     stats_ = new RoutingStatistics(telecom);
+    vessel_overview_ = new VesselOverview(telecom);
   }
 
   public bool show_network { get; private set; } = false;
@@ -49,10 +50,13 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
 
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         telecom_.network.routing_.prefer_one_bounce = telecom_.prefer_one_bounce = UnityEngine.GUILayout.Toggle(telecom_.prefer_one_bounce, "Prefer one-bounce connections");
+        UnityEngine.GUILayout.FlexibleSpace();
+        vessel_overview_.RenderButton();
       }
 
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         telecom_.network.routing_.use_apsp_heuristic = telecom_.use_apsp_heuristic = UnityEngine.GUILayout.Toggle(telecom_.use_apsp_heuristic, "Use A* search with Floyd-Warshall heuristic");
+        UnityEngine.GUILayout.FlexibleSpace();
         // Why two separate locations? Because Routing needs a local copy for testing, but I can only preserve fields in Telecom. So Telecom's copy is authoritative, and it copies it over to Routing.
         stats_.RenderButton();
       }
@@ -188,6 +192,7 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
 
   private Telecom telecom_;
   private RoutingStatistics stats_;
+  private VesselOverview vessel_overview_;
   private string alert_rate_limit_text;
   private string cleanup_days_text;
   private readonly Dictionary<Contracts.Contract, bool> open_contracts_ =
