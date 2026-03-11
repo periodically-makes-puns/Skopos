@@ -141,6 +141,7 @@ namespace σκοπός {
     Telecom.Instance?.RegisterFixedUpdateMetric(shortest_path_metric);
     Telecom.Instance?.RegisterFixedUpdateMetric(dijkstras_metric);
     Telecom.Instance?.RegisterFixedUpdateMetric(link_usage_metric);
+    Telecom.Instance?.RegisterFixedUpdateMetric(power_efficient_metric);
     Telecom.Instance?.RegisterFixedUpdateMetric(find_channels_metric);
     Telecom.Instance?.RegisterFixedUpdateMetric(find_channels_duplex_metric);
     Telecom.Instance?.RegisterFixedUpdateMetric(find_channels_ptmp_metric);
@@ -254,7 +255,7 @@ namespace σκοπός {
                               NetworkUsage usage) {
     if (FindChannel(source,
                      destination,
-                     round_trip_latency_limit,
+                     round_trip_latency_limit / 2, // Not strictly correct, but if no forward path exists of half latency limit it's unlikely a full round trip exists.
                      one_way_data_rate,
                      usage,
                      out Channel forward) == Unavailable) {
@@ -296,6 +297,11 @@ namespace σκοπός {
       NetworkUsage usage,
       out Channel channel) {
     find_channels_metric.Start();
+    if (use_power_efficient_routing) {
+      var res3 = FindChannelsPowerEfficient(source, destination, latency_limit, data_rate, usage, out channel);
+      find_channels_metric.StopSuccess();
+      return res3;
+    }
     if (prefer_one_bounce) {
       if (FindChannelsOneHop(source, destination, latency_limit, data_rate, usage, out channel) == PointToMultipointAvailability.Available) {
         find_channels_metric.StopSuccess();
@@ -324,7 +330,6 @@ namespace σκοπός {
     if (destinations.Count == 1) {
       channels = new Channel[1];
       var res2 = FindChannel(source, destinations[0], latency_limit, data_rate, usage, out channels[0]);
-      if (res2 == PointToMultipointAvailability.Unavailable) channels = null;
       return res2;
     }
     find_channels_metric.Start();
@@ -526,6 +531,112 @@ namespace σκοπός {
     }
     channel = null;
     a_star_metric.StopFailure();
+    return PointToMultipointAvailability.Unavailable;
+  }
+
+  private PointToMultipointAvailability FindChannelsPowerEfficient(
+    RACommNode source,
+    RACommNode destination,
+    double latency_limit,
+    double data_rate,
+    NetworkUsage usage,
+    out Channel channel) {
+    // We attempt to minimise power proportion usage in the route. This is motivated by the following observations:
+    // Globally speaking, there are two limiting factors on a network that we track: Bandwidth usage and transmit-power usage. 
+    // Every Skopos-related antenna provides a finite amount of bandwidth and transmit-power. Using more of these resources than we need to when routing is locally suboptimal.
+    // We should prefer a route that uses less of the network's overall resources if possible.
+    // This is still not globally optimal, since we could overburden an efficient link that also happens to be the only link for another given connection.
+    // Hopefully this will reduce unintuitive routing decisions.
+    
+    // We define the following new metric: for each edge on the network graph, we define its "power efficiency" as 1 / max_data_rate. This becomes the new edge weight.
+    // The power efficiency is the proportion of the total available antenna power a 1bps connection would use to transmit.
+    // The weight of a route is the sum of all of the power efficiencies of its links. This represents the total power used to route this connection.
+    // We then route (using Dijkstra's) the cheapest route that still maintains the given latency requirements.
+
+    // To avoid overusing particular links, we also define "freeness". An antenna that is already being used is likely to be efficient and overburdened.
+    // If we have the choice between multiple maximally efficient routes, we should choose the one that has less use.
+    // The "freeness" of a link is defined as 1 / CapacityWithUsage of that link. The "freeness" of a route is the sum of the freeness of its links.
+    // This serves as a tiebreaker.
+    
+    // This uses the precomputed shortest-path matrix to filter routes that are bad for latency.
+    const double c = 299792458;
+    power_efficient_metric.Start();
+    double latency_distance = c * latency_limit;
+    var distances = new Dictionary<RACommNode, ValueTuple<double, double, double>>();
+    var previous = new Dictionary<RACommNode, OrientedLink>();
+    var boundary = new PriorityQueue<RACommNode, ValueTuple<double, double, double>>();
+    var interior = new HashSet<RACommNode>();
+
+    power_efficient_metric.Pause();
+    heuristic.GenerateShortestPaths();
+    power_efficient_metric.Resume();
+
+    distances[source] = (0, 0, heuristic.GetHeuristicDistance(source, destination));
+    boundary.Enqueue(source, distances[source]);
+    previous[source] = null;
+    distances[destination] = (double.PositiveInfinity, double.PositiveInfinity, latency_distance);
+    channel = null;
+    while (boundary.TryDequeue(out RACommNode tx, out (double, double, double) weight_tuple)) {
+      if (weight_tuple != distances[tx]) {
+        continue;
+      }
+      double tx_efficiency = weight_tuple.Item1;
+      double tx_freeness = weight_tuple.Item2;
+      double tx_distance = weight_tuple.Item3;
+      if (tx == destination) {
+        channel = new Channel();
+        for (OrientedLink link = previous[tx];
+             link != null;
+             link = previous[link.tx]) {
+           channel.links.Add(link);
+        }
+        channel.links.Reverse();
+        channel.latency = tx_distance / c;
+        power_efficient_metric.StopSuccess();
+        return PointToMultipointAvailability.Available;
+      } // No early cutoff condition, since we never add a node with latency > latency_limit to the queue.
+      
+      interior.Add(tx);
+
+      if (rx_only_.Contains(tx)) {
+        continue;
+      }
+
+      double tx_node_penalty = heuristic.GetHeuristicDistance(tx, destination);
+
+      foreach (var stock_rx in tx.Keys) {
+        var rx = (RACommNode)stock_rx;
+
+        if (tx_only_.Contains(rx) || interior.Contains(rx) || !heuristic.IsGoodNode(rx)) {
+          continue;
+        }
+
+        var link = OrientedLink.Get(this, from: tx, to: rx);
+        if (link.max_data_rate < data_rate) { // Best-case data rate check.
+          continue;
+        }
+        double capacity = link.CapacityWithUsage(usage);
+        if (capacity < data_rate) {
+          continue;
+        }
+        double rx_efficiency = tx_efficiency + 1.0 / link.max_data_rate;
+        double rx_freeness = tx_freeness + 1.0 / capacity;
+
+        double tentative_distance = tx_distance + (tx.precisePosition - rx.precisePosition).magnitude + heuristic.GetHeuristicDistance(rx, destination) - tx_node_penalty; 
+        (double, double, double) rx_weight_tuple = (rx_efficiency, rx_freeness, tentative_distance);
+        if (tentative_distance > latency_distance || 
+            (distances.TryGetValue(rx, out (double, double, double) p) && rx_weight_tuple.CompareTo(p) > 0) ||
+            rx_weight_tuple.CompareTo(distances[destination]) > 0) { // If we cannot improve the destination, there is no point! 
+          // Latency optimality check
+          continue;
+        }
+        
+        distances[rx] = rx_weight_tuple;
+        previous[rx] = link;
+        boundary.Enqueue(rx, rx_weight_tuple);
+      }
+    }
+    power_efficient_metric.StopFailure();
     return PointToMultipointAvailability.Unavailable;
   }
 
@@ -1015,6 +1126,19 @@ namespace σκοπός {
       return true;
     }
 
+    public double CapacityWithUsage(NetworkUsage usage) {
+      // Tx power check.
+      double power_data_rate = max_data_rate * (1 - usage.TxPowerUsage(tx_antenna));
+
+      // Bandwidth check.
+      double rx_spectrum_usage = usage.SpectrumUsage(rx_antenna);
+      double tx_spectrum_usage = usage.SpectrumUsage(tx_antenna);
+      double spectrum_usage = (rx_spectrum_usage > tx_spectrum_usage) ? rx_spectrum_usage : tx_spectrum_usage;
+      double spectrum_data_rate = (band.ChannelWidth - spectrum_usage) * bits_per_symbol;
+
+      return (power_data_rate > spectrum_data_rate) ? spectrum_data_rate : power_data_rate;
+    }
+
     public double TxPowerUsageFromDataRate(double data_rate) {
       return data_rate / max_data_rate;
     }
@@ -1053,6 +1177,8 @@ namespace σκοπός {
   public bool prefer_one_bounce = false;
   
   public bool use_apsp_heuristic = true;
+  
+  public bool use_power_efficient_routing = true;
 
   private readonly RoutingNetworkUsage current_network_usage_;
 
@@ -1075,6 +1201,7 @@ namespace σκοπός {
   internal FixedUpdateMetric find_channels_ptmp_metric = new FixedUpdateMetric("Find Channels (PtMP)");
   internal FixedUpdateMetric one_hop_metric = new FixedUpdateMetric("One-Hop");
   internal FixedUpdateMetric a_star_metric = new FixedUpdateMetric("A*");
+  internal FixedUpdateMetric power_efficient_metric = new FixedUpdateMetric("A* Power Efficiency");
   internal FixedUpdateMetric shortest_path_metric = new FixedUpdateMetric("Shortest Path");
   internal FixedUpdateMetric dijkstras_metric = new FixedUpdateMetric("Dijkstra's");
   internal static FixedUpdateMetric link_usage_metric = new FixedUpdateMetric("UseLinks/UseLink");

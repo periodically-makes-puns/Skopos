@@ -58,6 +58,10 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
       }
 
       using (new UnityEngine.GUILayout.HorizontalScope()) {
+        telecom_.network.routing_.use_power_efficient_routing = telecom_.use_power_efficient_routing = UnityEngine.GUILayout.Toggle(telecom_.use_power_efficient_routing, "Use power-weighted routing");
+      }
+
+      using (new UnityEngine.GUILayout.HorizontalScope()) {
         UnityEngine.GUILayout.Label($"Contracted connections: {telecom_.network.contracted_connections.Count}");
         UnityEngine.GUILayout.Label($"Fixed Updates: {telecom_.runtimeMetrics_.num_fixed_update_iterations_}");
         UnityEngine.GUILayout.Label($"Average Total Runtime: {telecom_.runtimeMetrics_.AverageFixedUpdateRuntime:F2} ms");

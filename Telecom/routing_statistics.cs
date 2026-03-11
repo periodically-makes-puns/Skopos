@@ -38,6 +38,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         telecom_.network.routing_.one_hop_metric,
         telecom_.network.routing_.shortest_path_metric,
         telecom_.network.routing_.a_star_metric,
+        telecom_.network.routing_.power_efficient_metric,
         telecom_.network.routing_.dijkstras_metric,
         telecom_.network.routing_.find_channels_metric,
         Routing.link_usage_metric,
