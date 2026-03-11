@@ -53,6 +53,7 @@ namespace σκοπός {
       GameEvents.Contract.onContractsLoaded.Add(NotifyContractsLoaded);
       GameEvents.Contract.onContractsLoaded.Add(CleanMaintenanceContracts);
       StartCoroutine(CreateNetwork());
+      RegisterStaticFixedUpdateMetrics();
     }
 
     public void OnDestroy() {
@@ -126,6 +127,16 @@ namespace σκοπός {
       on_contracts_changed_cr_running = false;
     }
 
+    private void RegisterStaticFixedUpdateMetrics() {
+      RegisterFixedUpdateMetric(Service.service_availability_metric);
+      RegisterFixedUpdateMetric(Routing.link_usage_metric);
+      RegisterFixedUpdateMetric(Routing.fake_usage_metric);
+    }
+
+    internal void RegisterFixedUpdateMetric(FixedUpdateMetric metric) {
+      registered_metrics.Add(metric);
+    }
+
     private void OnGUI() {
       if (!enabled) return;
       if (KSP.UI.Screens.ApplicationLauncher.Ready && toolbar_button_ == null) {
@@ -196,7 +207,9 @@ namespace σκοπός {
         // Time does not advance in the VAB, but after a revert, it is incorrectly stuck in the past.
         ut_ = Planetarium.GetUniversalTime();
       }
-      //Routing.link_stats = new Routing.LinkStatistics();
+      foreach (FixedUpdateMetric metric in registered_metrics) {
+        metric.StartFixedUpdate();
+      }
       network?.Refresh();
     }
 
@@ -254,5 +267,6 @@ namespace σκοπός {
     private KSP.UI.Screens.ApplicationLauncherButton toolbar_button_;
 
     internal RuntimeMetrics runtimeMetrics_ = new RuntimeMetrics();
+    internal readonly List<FixedUpdateMetric> registered_metrics = new List<FixedUpdateMetric>();
   }
 }

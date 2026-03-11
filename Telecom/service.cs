@@ -11,6 +11,7 @@ namespace σκοπός {
   }
 
   public void ReportAvailability(bool available, double t) {
+    service_availability_metric.Start();
     this.available = available;
 
     double day = KSPUtil.dateTimeFormatter.Day;
@@ -47,6 +48,7 @@ namespace σκοπός {
     foreach (var metric in metrics_) {
       metric.UpdateCurrentDay(day_fraction_available_, day_fraction_);
     }
+    service_availability_metric.StopSuccess();
   }
 
   public void RegisterMetric(AvailabilityMetric metric) {
@@ -94,5 +96,7 @@ namespace σκοπός {
   private double day_fraction_;
 
   private List<AvailabilityMetric> metrics_ = new List<AvailabilityMetric>();
+
+  internal static FixedUpdateMetric service_availability_metric = new FixedUpdateMetric("ReportAvailability");
 }
 }  // namespace σκοπός
