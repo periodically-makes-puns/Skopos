@@ -5,9 +5,7 @@ using System.Linq;
 using CommNet;
 using CommNet.Network;
 using ContractConfigurator;
-using LibNoise.Models;
 using RealAntennas;
-using TMPro;
 using static σκοπός.Routing.PointToMultipointAvailability;
 
 namespace σκοπός {
@@ -158,6 +156,7 @@ namespace σκοπός {
                     IEnumerable<RACommNode> multiple_tracking_tx) {
     OrientedLink.ReturnLinks(this);
     links_.Clear();
+    RoutingPrecompute.VGVLink.ReturnLinks(this);
     current_network_usage_.Clear();
     heuristic.InvalidateCache();
 
@@ -648,83 +647,92 @@ namespace σκοπός {
     vgv_routing_metric.Start();
     double latency_distance = c * latency_limit;
     // TODO(egg): consider using the stock intrusive data structure.
-    var distances = new Dictionary<RACommNode, double>();
-    var previous = new Dictionary<RACommNode, RoutingPrecompute.VGVLink>();
-    var boundary = new PriorityQueue<RACommNode, double>();
-    var interior = new HashSet<RACommNode>();
-    var ingress = new Dictionary<RACommNode, OrientedLink>();
-    OrientedLink egress = null;
-    
-    foreach (RACommNode rx in source.Keys) {
-      if (!heuristic.TryGetVessel(rx, out int ind)) continue;
-      var link = OrientedLink.Get(this, from: source, to: rx);
-      if (!link.CheckCapacityWithUsage(usage, data_rate)) {
-        continue;
+    int vessel_count = heuristic.vessels.Count;
+    var distances = new double[vessel_count];
+    var ingress = new OrientedLink[vessel_count]; // For each vessel, what link do we take to enter the network?
+    var previous = new RoutingPrecompute.VGVLink[vessel_count];
+    var explored = new bool[vessel_count];
+    OrientedLink egress = null; // The final link we take to the destination.
+    int vessel_index_to_explore = -1;
+
+    for (int vessel_index = vessel_count - 1; vessel_index >= 0; --vessel_index) {
+      var rx = heuristic.vessels[vessel_index];
+      distances[vessel_index] = latency_distance;
+      ingress[vessel_index] = null;
+      explored[vessel_index] = false;
+      previous[vessel_index] = null;
+      if (source.ContainsKey(rx)) {
+        var link = OrientedLink.Get(this, from: source, to: rx);
+        var tentative_distance = link.length + heuristic.GetVGHeuristicDistance(tx: rx, rx: destination);
+        if (link.CheckCapacityWithUsage(usage, data_rate) && tentative_distance <= latency_distance) {
+          distances[vessel_index] = tentative_distance;
+          ingress[vessel_index] = link;
+          previous[vessel_index] = null;
+          if (vessel_index_to_explore == -1 || distances[vessel_index_to_explore] > distances[vessel_index]) {
+            vessel_index_to_explore = vessel_index;
+          }
+        }
       }
-      distances[rx] = link.length + heuristic.GetVGHeuristicDistance(rx, destination);
-      if (distances[rx] > latency_distance) continue;
-      ingress[rx] = link;
-      boundary.Enqueue(rx, distances[rx]);
-      previous[rx] = null;
     }
 
-    channel = new Channel();
-    while (boundary.TryDequeue(out RACommNode tx, out double tx_distance)) {
-      if (tx_distance != distances[tx]) {
-        // We have already considered `tx` through a shorter path.
-        continue;
-      }
+    while (vessel_index_to_explore != -1) {
+      var tx = heuristic.vessels[vessel_index_to_explore];
+      var tx_distance = distances[vessel_index_to_explore];
+      if (tx_distance > latency_distance) {
+        // We have run out of latency, no need to keep searching.
+        break;
+      } 
       double tx_node_penalty = heuristic.GetVGHeuristicDistance(tx, destination);
-      
+
       if (tx.ContainsKey(destination)) {
         var egress_link = OrientedLink.Get(this, from: tx, to: destination);
-        var final_distance = tx_distance - tx_node_penalty + egress_link.length;
-        if (final_distance < latency_distance && egress_link.CheckCapacityWithUsage(usage, data_rate)) {
-          egress = egress_link;
-          latency_distance = final_distance;
+        if (egress_link.CheckCapacityWithUsage(usage, data_rate)) {
+          var final_distance = tx_distance - tx_node_penalty + egress_link.length;
+          if (final_distance <= latency_distance) {
+            egress = egress_link;
+            latency_distance = final_distance;
+          }
         }
       }
-      if (tx_distance > latency_distance) {
-        break;
-      }
+      explored[vessel_index_to_explore] = true;
 
-      interior.Add(tx);
-
-
-      foreach (RACommNode rx in heuristic.GetLinkedNodes(tx)) {
-        if (interior.Contains(rx)) {
+      foreach (int rx_index in heuristic.GetLinkedIndices(vessel_index_to_explore)) {
+        if (explored[rx_index]) {
           continue;
         }
-        double distance_limit = latency_distance;
-        if (distances.TryGetValue(rx, out double current_best_rx_distance)) {
-          distance_limit = (latency_distance > current_best_rx_distance) ? current_best_rx_distance : latency_distance;
-        }
-        distance_limit -= distances[tx] - tx_node_penalty + heuristic.GetVGHeuristicDistance(rx, destination);
-        var links = heuristic.GetLinks(tx, rx);
+        var rx = heuristic.vessels[rx_index];
+        double distance_limit = distances[rx_index] - distances[vessel_index_to_explore] + tx_node_penalty - heuristic.GetVGHeuristicDistance(rx, destination);
+        var links = heuristic.vgv_links[vessel_index_to_explore, rx_index];
         var best_distance = links[0].distance;
         if (best_distance >= distance_limit) continue;
         var best_link = links.TakeWhile(link => link.distance <= distance_limit).Where(link => link.CheckCapacityWithUsage(usage, data_rate)).FirstOrDefault();
         if (best_link is null) continue;
-        double tentative_distance = distances[tx] + best_link.distance - tx_node_penalty + heuristic.GetVGHeuristicDistance(rx, destination);
-        distances[rx] = tentative_distance;
-        previous[rx] = best_link;
-        boundary.Enqueue(rx, tentative_distance);
+        double tentative_distance = distances[vessel_index_to_explore] + best_link.distance - tx_node_penalty + heuristic.GetVGHeuristicDistance(rx, destination);
+        distances[rx_index] = tentative_distance;
+        previous[rx_index] = best_link;
+      }
+      vessel_index_to_explore = -1;
+        
+      for (int i = vessel_count - 1; i >= 0; --i) {
+        if (!explored[i] && (vessel_index_to_explore == -1 || distances[vessel_index_to_explore] > distances[i])) {
+          vessel_index_to_explore = i;
+        }
       }
     }
     if (!(egress is null)) {
       channel = new Channel();
       channel.links.Add(egress);
       RACommNode prev = egress.tx;
-      for (RoutingPrecompute.VGVLink vgv_link = previous[egress.tx];
+      for (RoutingPrecompute.VGVLink vgv_link = previous[heuristic.vessel_ordering[egress.tx]];
             vgv_link != null;
-            vgv_link = previous[vgv_link.source_]) {
-        if (!(vgv_link.link2 is null)) { 
-          channel.links.Add(vgv_link.link2);
+            vgv_link = previous[heuristic.vessel_ordering[vgv_link.source]]) {
+        if (!(vgv_link.link2_ is null)) { 
+          channel.links.Add(vgv_link.link2_);
         }
-        channel.links.Add(vgv_link.link1);
-        prev = vgv_link.source_;
+        channel.links.Add(vgv_link.link1_);
+        prev = vgv_link.source;
       }
-      channel.links.Add(ingress[prev]);
+      channel.links.Add(ingress[heuristic.vessel_ordering[prev]]);
       channel.links.Reverse();
       channel.latency = latency_distance / c;
       vgv_routing_metric.StopSuccess();
@@ -746,28 +754,35 @@ namespace σκοπός {
     vgv_dijkstras_metric.Start();
     const double c = 299792458;
     double latency_distance = c * latency_limit;
-    // TODO(egg): consider using the stock intrusive data structure.
-    var distances = new Dictionary<RACommNode, double>();
-    var previous = new Dictionary<RACommNode, RoutingPrecompute.VGVLink>();
-    var boundary = new PriorityQueue<RACommNode, double>();
-    var interior = new HashSet<RACommNode>();
-    
-    var ingress = new Dictionary<RACommNode, OrientedLink>();
-    var egress = new OrientedLink[destinations.Count];
-    // Dijkstra’s algorithm without DecreaseKey.
 
     // VGV explores a dense graph with a small number of nodes. Therefore it actually makes more sense to ditch the priority queue entirely.
+    int vessel_count = heuristic.vessels.Count;
+    var distances = new double[vessel_count];
+    var ingress = new OrientedLink[vessel_count];
+    var previous = new RoutingPrecompute.VGVLink[vessel_count];
+    var explored = new bool[vessel_count];
+    var egress = new OrientedLink[destinations.Count];
+    int vessel_index_to_explore = -1;
 
-    foreach (RACommNode rx in source.Keys) {
-      if (!heuristic.TryGetVessel(rx, out int ind)) continue;
+    for (int vessel_index = vessel_count - 1; vessel_index >= 0; --vessel_index) {
+      var rx = heuristic.vessels[vessel_index];
+      distances[vessel_index] = double.PositiveInfinity;
+      ingress[vessel_index] = null;
+      explored[vessel_index] = false;
+      previous[vessel_index] = null;
+      if (!source.ContainsKey(rx)) {
+        continue; 
+      }
       var link = OrientedLink.Get(this, from: source, to: rx);
-      if (!link.CheckCapacityWithUsage(usage, data_rate)) {
+      if (!link.CheckCapacityWithUsage(usage, data_rate) || link.length > latency_distance) {
         continue;
       }
-      distances[rx] = link.length;
-      ingress[rx] = link;
-      boundary.Enqueue(rx, link.length);
-      previous[rx] = null;
+      distances[vessel_index] = link.length;
+      ingress[vessel_index] = link;
+      previous[vessel_index] = null;
+      if (vessel_index_to_explore == -1 || distances[vessel_index_to_explore] > distances[vessel_index]) {
+        vessel_index_to_explore = vessel_index;
+      }
     }
 
     double[] destination_distances = new double[destinations.Count];
@@ -778,72 +793,79 @@ namespace σκοπός {
 
     int rx_found = 0;
     channels = new Channel[destinations.Count];
-    bool is_point_to_multipoint = destinations.Count > 1;
-    while (boundary.TryDequeue(out RACommNode tx, out double tx_distance)) {
-      if (tx_distance != distances[tx]) {
-        // We have already considered `tx` through a shorter path.
-        continue;
-      }
+    while (vessel_index_to_explore != -1) {
+      var tx = heuristic.vessels[vessel_index_to_explore];
+      var tx_distance = distances[vessel_index_to_explore];
       if (tx_distance > latency_distance) {
         // We have run out of latency, no need to keep searching.
         break;
       } 
       
-      for (int i = destinations.Count - 1; i >= 0; --i) {
-        RACommNode destination = destinations[i];
+      for (int destination_index = destinations.Count - 1; destination_index >= 0; --destination_index) {
+        RACommNode destination = destinations[destination_index];
         if (tx.ContainsKey(destination)) {
           var egress_link = OrientedLink.Get(this, from: tx, to: destination);
-          if (!egress_link.CheckCapacityWithUsage(usage, data_rate)) continue;
-          var final_distance = tx_distance + egress_link.length;
-          if (final_distance > destination_distances[i]) continue;
-          if (egress[i] is null) rx_found++;
-          egress[i] = egress_link;
-          destination_distances[i] = final_distance;
-          latency_distance = destination_distances.Max();
+          if (egress_link.CheckCapacityWithUsage(usage, data_rate)) {
+            var final_distance = tx_distance + egress_link.length;
+            if (final_distance <= destination_distances[destination_index]) {
+              if (egress[destination_index] is null) rx_found++;
+              egress[destination_index] = egress_link;
+              destination_distances[destination_index] = final_distance;
+              latency_distance = destination_distances.Max();
+            }
+          }
         }
       }
 
-      interior.Add(tx);
+      explored[vessel_index_to_explore] = true;
 
-      foreach (RACommNode rx in heuristic.GetLinkedNodes(tx)) {
-        if (interior.Contains(rx)) {
+      foreach (int rx_index in heuristic.GetLinkedIndices(vessel_index_to_explore)) {
+        if (explored[rx_index]) {
           continue;
         }
         double distance_limit = latency_distance;
-        if (distances.TryGetValue(rx, out double current_best_rx_distance)) {
-          distance_limit = (latency_distance > current_best_rx_distance) ? current_best_rx_distance : latency_distance;
+        if (distances[rx_index] != double.PositiveInfinity) {
+          distance_limit = (latency_distance > distances[rx_index]) ? distances[rx_index] : latency_distance;
         }
-        distance_limit -= distances[tx];
-        var links = heuristic.GetLinks(tx, rx);
+        distance_limit -= distances[vessel_index_to_explore];
+        var links = heuristic.vgv_links[vessel_index_to_explore, rx_index];
         var best_distance = links[0].distance;
         if (best_distance >= distance_limit) continue;
         var best_link = links.TakeWhile(link => link.distance <= distance_limit).Where(link => link.CheckCapacityWithUsage(usage, data_rate)).FirstOrDefault();
         if (best_link is null) continue;
-        double tentative_distance = distances[tx] + best_link.distance;
-        distances[rx] = tentative_distance;
-        previous[rx] = best_link;
-        boundary.Enqueue(rx, tentative_distance);
+        double tentative_distance = distances[vessel_index_to_explore] + best_link.distance;
+        distances[rx_index] = tentative_distance;
+        previous[rx_index] = best_link; 
+      }
+      vessel_index_to_explore = -1;
+        
+      for (int i = vessel_count - 1; i >= 0; --i) {
+        if (!explored[i] && (vessel_index_to_explore == -1 || distances[vessel_index_to_explore] > distances[i])) {
+          vessel_index_to_explore = i;
+        }
       }
     }
-    if (rx_found == destinations.Count) {
-      channels = new Channel[rx_found];
-      for (int i = rx_found - 1; i >= 0; --i) {
-        channels[i] = new Channel();
-        channels[i].links.Add(egress[i]);
-        RACommNode prev = egress[i].tx;
-        for (RoutingPrecompute.VGVLink vgv_link = previous[egress[i].tx];
-             vgv_link != null;
-             vgv_link = previous[vgv_link.source_]) {
-          if (!(vgv_link.link2 is null)) { 
-            channels[i].links.Add(vgv_link.link2);
-          }
-          channels[i].links.Add(vgv_link.link1);
-          prev = vgv_link.source_;
+    
+    channels = new Channel[destinations.Count];
+    for (int destination_index = destinations.Count - 1; destination_index >= 0; --destination_index) {
+      if (egress[destination_index] is null) continue;
+      channels[destination_index] = new Channel();
+      channels[destination_index].links.Add(egress[destination_index]);
+      RACommNode prev = egress[destination_index].tx;
+      for (RoutingPrecompute.VGVLink vgv_link = previous[heuristic.vessel_ordering[prev]];
+            vgv_link != null;
+            vgv_link = previous[heuristic.vessel_ordering[vgv_link.source]]) {
+        if (!(vgv_link.link2_ is null)) { 
+          channels[destination_index].links.Add(vgv_link.link2_);
         }
-        channels[i].links.Add(ingress[prev]);
-        channels[i].links.Reverse();
-        channels[i].latency = destination_distances[i] / c;
+        channels[destination_index].links.Add(vgv_link.link1_);
+        prev = vgv_link.source;
       }
+      channels[destination_index].links.Add(ingress[heuristic.vessel_ordering[prev]]);
+      channels[destination_index].links.Reverse();
+      channels[destination_index].latency = destination_distances[destination_index] / c;
+    }
+    if (rx_found == destinations.Count) {
       vgv_dijkstras_metric.StopSuccess();
       return Available;
     }
@@ -976,35 +998,58 @@ namespace σκοπός {
     public class VGVLink {
       // Short for Vessel-Ground-Vessel.
       // Represents an abstract connection between two vessels, possibly linked by a relaying ground station in between.
-      public VGVLink(Routing routing, RACommNode source, RACommNode intermediary, RACommNode destination) {
-        source_ = source;
-        intermediary_ = intermediary;
-        destination_ = destination;
-        if (intermediary_ is null) {
-          link1 = OrientedLink.Get(routing, from: source, to: destination);
-          distance = link1.length;
-          max_data_rate = link1.max_data_rate;
-        } else {
-          link1 = OrientedLink.Get(routing, from: source, to: intermediary);
-          link2 = OrientedLink.Get(routing, from: intermediary, to: destination);
-          distance = link1.length + link2.length;
-          max_data_rate = (link1.max_data_rate > link2.max_data_rate) ? link2.max_data_rate : link1.max_data_rate;
+      private static readonly Queue<VGVLink> pool = new Queue<VGVLink>();
+      private static VGVLink GetFromPool() => pool.Count > 0 ? pool.Dequeue() : new VGVLink();
+      internal static void ReturnLinks(Routing r) {
+        while (r.vgv_links.TryDequeue(out VGVLink link)) {
+          link.Clear();
+          pool.Enqueue(link);
         }
+      }
+      public static VGVLink Get(Routing routing, RACommNode source, RACommNode intermediary, RACommNode destination) {
+        VGVLink link = GetFromPool();
+        if (intermediary is null) {
+          link.link1_ = OrientedLink.Get(routing, from: source, to: destination);
+          link.distance = link.link1_.length;
+          link.max_data_rate = link.link1_.max_data_rate;
+        } else {
+          link.link1_ = OrientedLink.Get(routing, from: source, to: intermediary);
+          link.link2_ = OrientedLink.Get(routing, from: intermediary, to: destination);
+          link.distance = link.link1_.length + link.link2_.length;
+          link.max_data_rate = (link.link1_.max_data_rate > link.link2_.max_data_rate) ? link.link2_.max_data_rate : link.link1_.max_data_rate;
+        }
+        return link;
+      }
+      
+      public static VGVLink Get(Routing routing, OrientedLink link1, OrientedLink link2) {
+        VGVLink link = GetFromPool();
+        link.link1_ = link1;
+        link.link2_ = link2;
+        link.distance = link.link1_.length + link.link2_.length;
+        link.max_data_rate = (link.link1_.max_data_rate > link.link2_.max_data_rate) ? link.link2_.max_data_rate : link.link1_.max_data_rate;
+        return link;
+      }
+
+      public void Clear() {
+        link1_ = null;
+        link2_ = null;
       }
 
       public bool CheckCapacityWithUsage(NetworkUsage usage, double data_rate) {
-        return link1.CheckCapacityWithUsage(usage, data_rate) && (link2 is null || link2.CheckCapacityWithUsage(usage, data_rate));
+        return link1_.CheckCapacityWithUsage(usage, data_rate) && (link2_ is null || link2_.CheckCapacityWithUsage(usage, data_rate));
       }
 
       public IEnumerable<OrientedLink> LinksReverse() {
-        if (!(link2 is null)) yield return link2;
-        yield return link1;
+        if (!(link2_ is null)) yield return link2_;
+        yield return link1_;
       }
       
-      public RACommNode source_, intermediary_, destination_;
-      public OrientedLink link1, link2;
-      public RealAntennaDigital outbound_antenna => link1.tx_antenna;
-      public RealAntennaDigital inbound_antenna => (link2 is null) ? link1.rx_antenna : link2.rx_antenna;
+      public RACommNode source => link1_.tx;
+      public RACommNode intermediary => (link2_ is null) ? null : link2_.tx;
+      public RACommNode destination => (link2_ is null) ? link1_.rx : link2_.rx;
+      public OrientedLink link1_, link2_;
+      public RealAntennaDigital outbound_antenna => link1_.tx_antenna;
+      public RealAntennaDigital inbound_antenna => (link2_ is null) ? link1_.rx_antenna : link2_.rx_antenna;
       public double distance {get; private set; } = 0;
       public double max_data_rate {get; private set; } = 0;
     }
@@ -1029,34 +1074,61 @@ namespace σκοπός {
       vgv_precompute_metric.Start();
       if (vessels.Count == 0) FindVessels();
       int N = vessels.Count;
-      vgv_links = new List<VGVLink>[N, N];
-      adjacency_list = new List<RACommNode>[N];
+      if (vgv_links?.LongLength != N * N) { // We only need to resize and allocate if the number of vessels actually changed.
+        vgv_links = new List<VGVLink>[N, N];
+        for (int i = N - 1; i >= 0; --i) {
+          for (int j = N - 1; j >= 0; --j) {
+            vgv_links[i, j] = new List<VGVLink>();
+          }
+        }
+      }
+      if (adjacency_list?.Length != N) {
+        adjacency_list = new List<int>[N];
+        for (int i = N - 1; i >= 0; --i) {
+          adjacency_list[i] = new List<int>();
+        }
+      }
       for (int i = N - 1; i >= 0; --i) {
-        adjacency_list[i] = new List<RACommNode>();
+        adjacency_list[i].Clear();
         for (int j = N - 1; j >= 0; --j) {
           if (i == j) {
             continue;
           }
-          vgv_links[i, j] = new List<VGVLink>();
-          RACommNode source = vessels[i];
-          RACommNode destination = vessels[j];
-          foreach (RACommNode intermediary in source.Keys) {
-            if (intermediary.ContainsKey(destination)) {
-              VGVLink link = new VGVLink(routing_, source, intermediary, destination);
-              if (link.CheckCapacityWithUsage(NetworkUsage.None, minimum_link_data_rate)) {
-                  vgv_links[i, j].Add(link);  
-              }
-            }
-          }
-          if (source.ContainsKey(destination)) {
-            VGVLink link = new VGVLink(routing_, source, null, destination);
+          vgv_links[i, j].Clear();
+          if (vessels[i].ContainsKey(vessels[j])) {
+            VGVLink link = VGVLink.Get(routing_, vessels[i], null, vessels[j]);
             if (link.CheckCapacityWithUsage(NetworkUsage.None, minimum_link_data_rate)) {
               vgv_links[i, j].Add(link);  
             }
           }
+        }
+      }
+      for (int i = N - 1; i >= 0; --i) {
+        RACommNode source = vessels[i];
+        foreach (RACommNode intermediary in source.Keys) { 
+          if (vessel_ordering.ContainsKey(intermediary)) continue;
+          OrientedLink outbound = OrientedLink.Get(routing_, from: source, to: intermediary);
+          if (outbound.max_data_rate < minimum_link_data_rate) continue;
+          for (int j = N - 1; j >= 0; --j) {
+            if (i == j) continue;
+            RACommNode destination = vessels[j];
+            if (intermediary.ContainsKey(destination)) {
+              OrientedLink inbound = OrientedLink.Get(routing_, from: intermediary, to: destination);
+              if (inbound.max_data_rate < minimum_link_data_rate) continue;
+              VGVLink link = VGVLink.Get(routing_, outbound, inbound);
+              vgv_links[i, j].Add(link);
+            }
+          }
+        }
+      }
+      for (int i = N - 1; i >= 0; --i) {
+        for (int j = N - 1; j >= 0; --j) {
+          if (i == j) {
+            continue;
+          }
           vgv_links[i, j] = vgv_links[i, j].OrderBy(link => link.distance).ThenByDescending(link => link.max_data_rate).ToList();
           if (vgv_links[i, j].Count > 0) {
-            adjacency_list[i].Add(destination);
+            adjacency_list[i].Add(j);
           }
         }
       }
@@ -1067,7 +1139,9 @@ namespace σκοπός {
 
     public void CalculateShortestVVPaths() {
       int N = vessels.Count;
-      shortest_vv_paths = new double[N, N];
+      if (shortest_vv_paths?.LongLength != N * N) {
+        shortest_vv_paths = new double[N, N];
+      }
       for (int i = N - 1; i >= 0; --i) {
         for (int j = N - 1; j >= 0; --j) {
           if (i == j) {
@@ -1099,45 +1173,43 @@ namespace σκοπός {
       return null;
     } 
 
-    public IList<RACommNode> GetLinkedNodes(RACommNode tx) {
-      if (vessel_ordering.TryGetValue(tx, out int i)) {
-        return adjacency_list[i];
-      } else {
-        //Telecom.Log($"Tried to get adjlist for {tx.displayName} and failed!");
-      }
-      return null;
-    }
-
-    public bool TryGetVessel(RACommNode tx, out int ind) {
-      return vessel_ordering.TryGetValue(tx, out ind);
+    public IList<int> GetLinkedIndices(int i) {
+      return adjacency_list[i];
     }
 
     public double GetVGHeuristicDistance(RACommNode tx, RACommNode rx) {
-      if (!(vg_heuristic.TryGetValue((tx, rx), out double distance))) {
-        if (vessel_ordering.TryGetValue(tx, out int i)) {
-          double best_distance = double.PositiveInfinity;
-          for (int j = vessels.Count - 1; j >= 0; --j) {
-            if (vessels[j].ContainsKey(rx)) {
-              OrientedLink link = OrientedLink.Get(routing_, from: vessels[j], to: rx);
-              double this_distance = shortest_vv_paths[i, j] + link.length;
-              if (this_distance < best_distance) best_distance = this_distance;
+      if (!vessel_ordering.TryGetValue(tx, out int i)) {
+        return double.PositiveInfinity; // We do not intend to handle this case.
+      }
+      if (!(vg_heuristic.TryGetValue(rx, out double[] distance))) {
+        distance = new double[vessels.Count];
+        for (int j = vessels.Count - 1; j >= 0; --j) {
+          if (vessels[j].ContainsKey(rx)) {
+            OrientedLink link = OrientedLink.Get(routing_, from: vessels[j], to: rx);
+            distance[j] = link.length;
+          } else {
+            distance[j] = double.PositiveInfinity;
+          }
+        }
+        for (int ind = vessels.Count - 1; ind >= 0; --ind) {
+          if (distance[ind] == double.PositiveInfinity) {
+            for (int j = vessels.Count - 1; j >= 0; --j) {
+              double update = distance[j] + shortest_vv_paths[ind, j];
+              if (update < distance[ind]) distance[ind] = update;
             }
           }
-          vg_heuristic[(tx, rx)] = best_distance;
-          //Telecom.Log($"VG {tx.displayName} -> {rx.displayName} = {best_distance}");
-          return best_distance;
         }
-        return double.PositiveInfinity;
+        vg_heuristic[rx] = distance;
       }
-      return distance;
+      return distance[i];
     }
 
-    private readonly Dictionary<RACommNode, int> vessel_ordering = new Dictionary<RACommNode, int>(32);
+    public readonly Dictionary<RACommNode, int> vessel_ordering = new Dictionary<RACommNode, int>(32);
     public readonly List<RACommNode> vessels = new List<RACommNode>();
-    private List<VGVLink>[,] vgv_links;
-    private List<RACommNode>[] adjacency_list;
+    public List<VGVLink>[,] vgv_links;
+    private List<int>[] adjacency_list;
     private double[,] shortest_vv_paths;
-    private readonly Dictionary<(RACommNode, RACommNode), double> vg_heuristic = new Dictionary<(RACommNode, RACommNode), double>();
+    private readonly Dictionary<RACommNode, double[]> vg_heuristic = new Dictionary<RACommNode, double[]>();
     private bool cached_vgv = false;
     private Routing routing_;
     internal FixedUpdateMetric vgv_precompute_metric = new FixedUpdateMetric("VGV Link Precompute");
@@ -1483,6 +1555,8 @@ namespace σκοπός {
 
   private readonly Dictionary<(RACommNode, RACommNode), OrientedLink> links_ =
       new Dictionary<(RACommNode, RACommNode), OrientedLink>();
+
+  private readonly Queue<RoutingPrecompute.VGVLink> vgv_links = new Queue<RoutingPrecompute.VGVLink>();
   
   // Stations only capable of transmitting.
   private HashSet<RACommNode> tx_only_ = new HashSet<RACommNode>();
