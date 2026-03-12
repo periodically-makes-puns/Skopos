@@ -62,7 +62,7 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
       }
 
       using (new UnityEngine.GUILayout.HorizontalScope()) {
-        telecom_.network.routing_.use_power_efficient_routing = telecom_.use_power_efficient_routing = UnityEngine.GUILayout.Toggle(telecom_.use_power_efficient_routing, "Use power-weighted routing");
+        telecom_.network.routing_.use_vgv_routing = telecom_.use_vgv_routing = UnityEngine.GUILayout.Toggle(telecom_.use_vgv_routing, "Use VGV routing");
       }
 
       using (new UnityEngine.GUILayout.HorizontalScope()) {

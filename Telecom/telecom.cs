@@ -266,6 +266,8 @@ namespace σκοπός {
     public bool use_apsp_heuristic = false;
     [KSPField(isPersistant = true)]
     public bool use_power_efficient_routing = false;
+    [KSPField(isPersistant = true)]
+    public bool use_vgv_routing = false;
     private KSP.UI.Screens.ApplicationLauncherButton toolbar_button_;
 
     internal RuntimeMetrics runtimeMetrics_ = new RuntimeMetrics();
