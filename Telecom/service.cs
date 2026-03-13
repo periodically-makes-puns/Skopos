@@ -97,6 +97,6 @@ namespace σκοπός {
 
   private List<AvailabilityMetric> metrics_ = new List<AvailabilityMetric>();
 
-  internal static FixedUpdateMetric service_availability_metric = new FixedUpdateMetric("ReportAvailability");
+  internal static PerRefreshMetric service_availability_metric = new PerRefreshMetric("ReportAvailability");
 }
 }  // namespace σκοπός

@@ -29,7 +29,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
       return;
     }
     using (new UnityEngine.GUILayout.HorizontalScope()) { // the most bootleg table imaginable
-      FixedUpdateMetric[] metrics = { 
+      List<PerRefreshMetric> metrics = new List<PerRefreshMetric> { 
         telecom_.network.routing_.find_channels_duplex_metric,
         telecom_.network.routing_.find_channels_ptmp_metric,
         telecom_.network.routing_.reset_metric, 
@@ -47,12 +47,13 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         telecom_.network.kerbalism_consumption_metric,
         Service.service_availability_metric,
       };
+      metrics = metrics.Where(metric => metric.calls_this_fixedupdate > 0).ToList();
       using (new UnityEngine.GUILayout.VerticalScope()) {
         using (new UnityEngine.GUILayout.HorizontalScope()) {
           UnityEngine.GUILayout.FlexibleSpace();
           UnityEngine.GUILayout.Label("Timing Statistics");
         }
-        foreach (FixedUpdateMetric metric in metrics) {
+        foreach (PerRefreshMetric metric in metrics) {
           using (new UnityEngine.GUILayout.HorizontalScope()) {
             UnityEngine.GUILayout.FlexibleSpace();
             UnityEngine.GUILayout.Label(metric.name);
@@ -61,49 +62,49 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Total Calls");
-        foreach (FixedUpdateMetric metric in metrics) {
+        foreach (PerRefreshMetric metric in metrics) {
           UnityEngine.GUILayout.Label(metric.total_calls.ToString());
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("✓ Calls");
-        foreach (FixedUpdateMetric metric in metrics) {
+        foreach (PerRefreshMetric metric in metrics) {
           UnityEngine.GUILayout.Label(metric.successes.ToString());
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("✗ Calls", principia.ksp_plugin_adapter.Style.Error(UnityEngine.GUI.skin.label));
-        foreach (FixedUpdateMetric metric in metrics) {
+        foreach (PerRefreshMetric metric in metrics) {
           UnityEngine.GUILayout.Label(metric.failures.ToString());
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Avg. Calls");
-        foreach (FixedUpdateMetric metric in metrics) {
+        foreach (PerRefreshMetric metric in metrics) {
           UnityEngine.GUILayout.Label($"{metric.average_calls_per_fixedupdate:F3}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Calls This Frame");
-        foreach (FixedUpdateMetric metric in metrics) {
+        foreach (PerRefreshMetric metric in metrics) {
           UnityEngine.GUILayout.Label($"{metric.calls_this_fixedupdate}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Avg. Time/Call");
-        foreach (FixedUpdateMetric metric in metrics) {
+        foreach (PerRefreshMetric metric in metrics) {
           UnityEngine.GUILayout.Label($"{short_time_to_string(metric.average_runtime_per_call)}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Avg. Time Total");
-        foreach (FixedUpdateMetric metric in metrics) {
+        foreach (PerRefreshMetric metric in metrics) {
           UnityEngine.GUILayout.Label($"{short_time_to_string(metric.average_runtime_per_fixedupdate)}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Last Time Total");
-        foreach (FixedUpdateMetric metric in metrics) {
+        foreach (PerRefreshMetric metric in metrics) {
           UnityEngine.GUILayout.Label($"{short_time_to_string(metric.total_runtime_this_fixedupdate)}");
         }
       }

@@ -50,6 +50,7 @@ namespace σκοπός {
       Log("Starting");
       enabled = false;
       GameEvents.CommNet.OnNetworkInitialized.Add(NetworkInitializedNotify);
+      GameEvents.CommNet.OnNetworkInitialized.Add(AddPostUpdateHandler);
       GameEvents.Contract.onContractsLoaded.Add(NotifyContractsLoaded);
       GameEvents.Contract.onContractsLoaded.Add(CleanMaintenanceContracts);
       StartCoroutine(CreateNetwork());
@@ -83,6 +84,26 @@ namespace σκοπός {
 
     private void NetworkInitializedNotify() {
       Log("CommNet Network Initialization fired.");
+    }
+
+    private void AddPostUpdateHandler() {
+      if (RACommNetNetwork.Instance?.CommNet?.OnNetworkPostUpdate is Action) {
+        previous_on_network_post_update = RACommNetNetwork.Instance?.CommNet?.OnNetworkPostUpdate;
+      }
+      if (!(RACommNetNetwork.Instance?.CommNet is null)) {
+        RACommNetNetwork.Instance.CommNet.OnNetworkPostUpdate = PostUpdateHandler;
+      }
+    }
+
+    private void PostUpdateHandler() {
+      //const double MIN_UPDATE_INTERVAL = 0.1;
+      if (previous_on_network_post_update is Action) previous_on_network_post_update();
+      else {
+        double now = Planetarium.GetUniversalTime();
+        if (last_refresh_ut <= now) {
+          do_refresh = true;
+        }
+      }
     }
 
     private IEnumerator CreateNetwork() {
@@ -133,7 +154,7 @@ namespace σκοπός {
       RegisterFixedUpdateMetric(Routing.fake_usage_metric);
     }
 
-    internal void RegisterFixedUpdateMetric(FixedUpdateMetric metric) {
+    internal void RegisterFixedUpdateMetric(PerRefreshMetric metric) {
       registered_metrics.Add(metric);
     }
 
@@ -207,10 +228,15 @@ namespace σκοπός {
         // Time does not advance in the VAB, but after a revert, it is incorrectly stuck in the past.
         ut_ = Planetarium.GetUniversalTime();
       }
-      foreach (FixedUpdateMetric metric in registered_metrics) {
-        metric.StartFixedUpdate();
+      
+      if (do_refresh) {
+        foreach (PerRefreshMetric metric in registered_metrics) {
+          metric.StartRefresh();
+        }
+        network?.Refresh();
+        last_refresh_ut = ut_;
+        do_refresh = false;
       }
-      network?.Refresh();
     }
 
     private void LateUpdate() {
@@ -271,6 +297,9 @@ namespace σκοπός {
     private KSP.UI.Screens.ApplicationLauncherButton toolbar_button_;
 
     internal RuntimeMetrics runtimeMetrics_ = new RuntimeMetrics();
-    internal readonly List<FixedUpdateMetric> registered_metrics = new List<FixedUpdateMetric>();
+    internal readonly List<PerRefreshMetric> registered_metrics = new List<PerRefreshMetric>();
+    internal bool do_refresh = false;
+    private double last_refresh_ut = 0;
+    private Action previous_on_network_post_update = null;
   }
 }

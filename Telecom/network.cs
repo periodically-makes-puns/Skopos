@@ -191,8 +191,8 @@ namespace σκοπός {
       }
       kerbalism_consumption_metric.StopSuccess();
       refresh_watch_.Stop();
-      metrics.num_fixed_update_iterations_++;
-      metrics.fixed_update_runtime_ = refresh_watch_.Elapsed.TotalMilliseconds;
+      metrics.num_iterations_++;
+      metrics.total_runtime_ = refresh_watch_.Elapsed.TotalMilliseconds;
       UnityEngine.Profiling.Profiler.EndSample();
     }
     
@@ -282,6 +282,6 @@ namespace σκοπός {
         new Dictionary<Contracts.Contract, List<Connection>>();
     public HashSet<Connection> contracted_connections { get; } = new HashSet<Connection>();
 
-    internal FixedUpdateMetric kerbalism_consumption_metric = new FixedUpdateMetric("Kerbalism EC Consumption");
+    internal PerRefreshMetric kerbalism_consumption_metric = new PerRefreshMetric("Kerbalism EC Consumption");
   }
 }

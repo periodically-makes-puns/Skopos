@@ -828,11 +828,9 @@ namespace σκοπός {
           distance_limit = (latency_distance > distances[rx_index]) ? distances[rx_index] : latency_distance;
         }
         distance_limit -= distances[vessel_index_to_explore];
-        var links = heuristic.vgv_links[vessel_index_to_explore, rx_index];
-        var best_distance = links[0].distance;
-        if (best_distance >= distance_limit) continue;
-        var best_link = links.TakeWhile(link => link.distance <= distance_limit).Where(link => link.CheckCapacityWithUsage(usage, data_rate)).FirstOrDefault();
-        if (best_link is null) continue;
+        if (!heuristic.TryGetShortestLinkWithUsage(tx: vessel_index_to_explore, rx: rx_index, max_distance: distance_limit, usage, min_data_rate: data_rate, out RoutingPrecompute.VGVLink best_link)) {
+          continue;
+        }
         double tentative_distance = distances[vessel_index_to_explore] + best_link.distance;
         distances[rx_index] = tentative_distance;
         previous[rx_index] = best_link; 
@@ -979,7 +977,7 @@ namespace σκοπός {
       ordering.Clear();
       vessels.Clear();
       vessel_ordering.Clear();
-      vg_heuristic.Clear();
+      vg_fresh.Clear(); // So we don't have to reallocate double[]s.
       shortest_path = null;
       path_forwardtrace = null;
       cached = false;
@@ -993,12 +991,12 @@ namespace σκοπός {
     private double[,] shortest_path;
     private int[,] path_forwardtrace;
     private bool cached = false;
-    internal FixedUpdateMetric apsp_metric = new FixedUpdateMetric("Floyd-Warshall");
+    internal PerRefreshMetric apsp_metric = new PerRefreshMetric("Floyd-Warshall");
 
     public class VGVLink {
       // Short for Vessel-Ground-Vessel.
       // Represents an abstract connection between two vessels, possibly linked by a relaying ground station in between.
-      private static readonly Queue<VGVLink> pool = new Queue<VGVLink>();
+      private static readonly Queue<VGVLink> pool = new Queue<VGVLink>(); // Borrowing the link pooling from OrientedLink.
       private static VGVLink GetFromPool() => pool.Count > 0 ? pool.Dequeue() : new VGVLink();
       internal static void ReturnLinks(Routing r) {
         while (r.vgv_links.TryDequeue(out VGVLink link)) {
@@ -1036,7 +1034,12 @@ namespace σκοπός {
       }
 
       public bool CheckCapacityWithUsage(NetworkUsage usage, double data_rate) {
-        return link1_.CheckCapacityWithUsage(usage, data_rate) && (link2_ is null || link2_.CheckCapacityWithUsage(usage, data_rate));
+        if (link2_ is null) {
+          return link1_.CheckCapacityWithUsage(usage, data_rate);
+        } else {
+          return data_rate < max_data_rate && link1_.CheckTxCapacityWithUsage(usage, data_rate) && link2_.CheckRxCapacityWithUsage(usage, data_rate);
+          // We can omit the intermediary check since groundstations are all multi-tracking, so we just check against our precomputed max_data-rate.
+        }
       }
 
       public IEnumerable<OrientedLink> LinksReverse() {
@@ -1109,7 +1112,7 @@ namespace σκοπός {
           if (vessel_ordering.ContainsKey(intermediary)) continue;
           OrientedLink outbound = OrientedLink.Get(routing_, from: source, to: intermediary);
           if (outbound.max_data_rate < minimum_link_data_rate) continue;
-          for (int j = N - 1; j >= 0; --j) {
+          for (int j = N - 1; j >= 0; --j) { // Yes, looping over vessels ends up faster than looping over Dictionary keys.
             if (i == j) continue;
             RACommNode destination = vessels[j];
             if (intermediary.ContainsKey(destination)) {
@@ -1126,7 +1129,8 @@ namespace σκοπός {
           if (i == j) {
             continue;
           }
-          vgv_links[i, j] = vgv_links[i, j].OrderBy(link => link.distance).ThenByDescending(link => link.max_data_rate).ToList();
+          vgv_links[i, j] = vgv_links[i, j].OrderByDescending(link => link.distance).ThenBy(link => link.max_data_rate).ToList();
+          // Reverse order, because I like reverse iteration.
           if (vgv_links[i, j].Count > 0) {
             adjacency_list[i].Add(j);
           }
@@ -1164,14 +1168,18 @@ namespace σκοπός {
       }
     }
 
-    public IList<VGVLink> GetLinks(RACommNode tx, RACommNode rx) {
-      if (vessel_ordering.TryGetValue(tx, out int i) && vessel_ordering.TryGetValue(rx, out int j)) {
-        return vgv_links[i, j];
-      } else {
-        //Telecom.Log($"Tried to get links for {tx.displayName} to {rx.displayName} and failed!");
+    public bool TryGetShortestLinkWithUsage(int tx, int rx, double max_distance, NetworkUsage usage, double min_data_rate, out VGVLink link) {
+      link = null;
+      var links = vgv_links[tx, rx];
+      for (int i = links.Count - 1; i >= 0; --i) {
+        if (links[i].distance > max_distance) return false; // The links are sorted so we can shortcut here.
+        if (links[i].CheckCapacityWithUsage(usage, min_data_rate)) {
+          link = links[i];
+          return true;
+        }
       }
-      return null;
-    } 
+      return false;
+    }
 
     public IList<int> GetLinkedIndices(int i) {
       return adjacency_list[i];
@@ -1181,12 +1189,18 @@ namespace σκοπός {
       if (!vessel_ordering.TryGetValue(tx, out int i)) {
         return double.PositiveInfinity; // We do not intend to handle this case.
       }
-      if (!(vg_heuristic.TryGetValue(rx, out double[] distance))) {
-        distance = new double[vessels.Count];
+      if (!(vg_fresh.TryGetValue(rx, out bool fresh)) || !fresh) {
+        if (!vg_heuristic.TryGetValue(rx, out double[] distance) || distance.Length != vessels.Count) {
+          distance = new double[vessels.Count];
+        }
         for (int j = vessels.Count - 1; j >= 0; --j) {
           if (vessels[j].ContainsKey(rx)) {
             OrientedLink link = OrientedLink.Get(routing_, from: vessels[j], to: rx);
-            distance[j] = link.length;
+            if (link.max_data_rate > 1e2) {
+              distance[j] = link.length;
+            } else {
+              distance[j] = double.PositiveInfinity;
+            }
           } else {
             distance[j] = double.PositiveInfinity;
           }
@@ -1200,8 +1214,9 @@ namespace σκοπός {
           }
         }
         vg_heuristic[rx] = distance;
+        vg_fresh[rx] = true;
       }
-      return distance[i];
+      return vg_heuristic[rx][i];
     }
 
     public readonly Dictionary<RACommNode, int> vessel_ordering = new Dictionary<RACommNode, int>(32);
@@ -1210,9 +1225,10 @@ namespace σκοπός {
     private List<int>[] adjacency_list;
     private double[,] shortest_vv_paths;
     private readonly Dictionary<RACommNode, double[]> vg_heuristic = new Dictionary<RACommNode, double[]>();
+    private readonly Dictionary<RACommNode, bool> vg_fresh = new Dictionary<RACommNode, bool>();
     private bool cached_vgv = false;
     private Routing routing_;
-    internal FixedUpdateMetric vgv_precompute_metric = new FixedUpdateMetric("VGV Link Precompute");
+    internal PerRefreshMetric vgv_precompute_metric = new PerRefreshMetric("VGV Link Precompute");
   }
 
   private class LinkUsage {
@@ -1495,6 +1511,29 @@ namespace σκοπός {
       return true;
     }
 
+    public bool CheckTxCapacityWithUsage(NetworkUsage usage, double data_rate) {
+      // Tx power check.
+      if (max_data_rate * (1 - usage.TxPowerUsage(tx_antenna)) < data_rate) {
+        return false;
+      }
+
+      double max_used_data_rate = band.ChannelWidth * bits_per_symbol - data_rate;
+      // Tx bandwidth check.
+      if (usage.SpectrumUsage(tx_antenna) * bits_per_symbol > max_used_data_rate) {
+        return false;
+      }
+      return true;
+    }
+
+    public bool CheckRxCapacityWithUsage(NetworkUsage usage, double data_rate) {
+      double max_used_data_rate = band.ChannelWidth * bits_per_symbol - data_rate;
+      // Rx bandwidth check.
+      if (usage.SpectrumUsage(rx_antenna) * bits_per_symbol > max_used_data_rate) {
+        return false;
+      }
+      return true;
+    }
+
     public double CapacityWithUsage(NetworkUsage usage) {
       // Tx power check.
       double power_data_rate = max_data_rate * (1 - usage.TxPowerUsage(tx_antenna));
@@ -1568,18 +1607,18 @@ namespace σκοπός {
   private HashSet<RACommNode> multiple_tracking_ = new HashSet<RACommNode>();
 
   public RoutingPrecompute heuristic;
-  internal FixedUpdateMetric reset_metric = new FixedUpdateMetric("Reset");
-  internal FixedUpdateMetric find_channels_metric = new FixedUpdateMetric("Find Channels");
-  internal FixedUpdateMetric find_channels_duplex_metric = new FixedUpdateMetric("Find Channels (Duplex)");
-  internal FixedUpdateMetric find_channels_ptmp_metric = new FixedUpdateMetric("Find Channels (PtMP)");
-  internal FixedUpdateMetric one_hop_metric = new FixedUpdateMetric("One-Hop");
-  internal FixedUpdateMetric a_star_metric = new FixedUpdateMetric("A*");
-  internal FixedUpdateMetric shortest_path_metric = new FixedUpdateMetric("Shortest Path");
-  internal FixedUpdateMetric dijkstras_metric = new FixedUpdateMetric("Dijkstra's");
-  internal FixedUpdateMetric vgv_routing_metric = new FixedUpdateMetric("VGV A*");
-  internal FixedUpdateMetric vgv_dijkstras_metric = new FixedUpdateMetric("VGV Dijkstra's");
-  internal static FixedUpdateMetric link_usage_metric = new FixedUpdateMetric("UseLinks/UseLink");
-  internal static FixedUpdateMetric fake_usage_metric = new FixedUpdateMetric("Fake UseLinks");
+  internal PerRefreshMetric reset_metric = new PerRefreshMetric("Reset");
+  internal PerRefreshMetric find_channels_metric = new PerRefreshMetric("Find Channels");
+  internal PerRefreshMetric find_channels_duplex_metric = new PerRefreshMetric("Find Channels (Duplex)");
+  internal PerRefreshMetric find_channels_ptmp_metric = new PerRefreshMetric("Find Channels (PtMP)");
+  internal PerRefreshMetric one_hop_metric = new PerRefreshMetric("One-Hop");
+  internal PerRefreshMetric a_star_metric = new PerRefreshMetric("A*");
+  internal PerRefreshMetric shortest_path_metric = new PerRefreshMetric("Shortest Path");
+  internal PerRefreshMetric dijkstras_metric = new PerRefreshMetric("Dijkstra's");
+  internal PerRefreshMetric vgv_routing_metric = new PerRefreshMetric("VGV A*");
+  internal PerRefreshMetric vgv_dijkstras_metric = new PerRefreshMetric("VGV Dijkstra's");
+  internal static PerRefreshMetric link_usage_metric = new PerRefreshMetric("UseLinks/UseLink");
+  internal static PerRefreshMetric fake_usage_metric = new PerRefreshMetric("Fake UseLinks");
 }
 
 }

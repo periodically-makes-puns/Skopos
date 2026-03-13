@@ -67,15 +67,14 @@
     <Compile Include="priority_queue_test.cs" />
     <Compile Include="routing_test.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <None Include="a_star_tests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="$(SolutionDir)Telecom\Telecom.csproj">
-      <Project>{c56ae65d-f12b-46df-ad6a-36862a047db0}</Project>
-      <Name>Telecom</Name>
-    </ProjectReference>
+    <None Include="test_connections.csv" />
+    <None Include="test_stations.csv" />
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -4,19 +4,19 @@ using System.Diagnostics;
 namespace σκοπός {
   internal class RuntimeMetrics {
     public RuntimeMetrics() { }
-    public int num_fixed_update_iterations_ = 0;
-    public double fixed_update_runtime_ = 0;
+    public int num_iterations_ = 0;
+    public double total_runtime_ = 0;
 
-    public double AverageFixedUpdateRuntime => fixed_update_runtime_ / num_fixed_update_iterations_;
+    public double AverageFixedUpdateRuntime => total_runtime_ / num_iterations_;
   }
 
-  internal class FixedUpdateMetric {
-    public FixedUpdateMetric(string name) { 
+  internal class PerRefreshMetric {
+    public PerRefreshMetric(string name) { 
       this.name = name;
       watch_ = new Stopwatch();  
     }
 
-    public void StartFixedUpdate() {
+    public void StartRefresh() {
       if (calls_this_fixedupdate > 0) fixedupdate_count_++;
       ticks_start_last_fixedupdate_ = watch_.ElapsedTicks;
       calls_this_fixedupdate = 0;
