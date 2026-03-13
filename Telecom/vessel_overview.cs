@@ -1,5 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using CommNet;
+using CommNet.Network;
 using RealAntennas;
 
 namespace σκοπός {
@@ -40,6 +45,9 @@ namespace σκοπός {
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         UnityEngine.GUILayout.Label($"Total antenna spectrum usage: {RATools.PrettyPrint(total_spectrum_usage)}Hz");
         UnityEngine.GUILayout.Label($"Total (normalized) power usage: {total_normalised_power_usage:P2}");
+        if (UnityEngine.GUILayout.Button(new UnityEngine.GUIContent("Reset Link Display", "Show all Skopos links, clearing any filter applied by the Show Links buttons."))) {
+          telecom_.main_window_.focused_vessel = null;
+        }
       }
       
       using (new UnityEngine.GUILayout.HorizontalScope()) { // Yet another budget table. Yippee.
@@ -53,7 +61,11 @@ namespace σκοπός {
                   ScheduleShrink();
                   return;
                 }
-                UnityEngine.GUILayout.Label($"{node.displayName}");
+                string name = node.displayName;
+                if (row == telecom_.main_window_.focused_vessel) {
+                  name = $">> {node.displayName} <<";
+                }
+                UnityEngine.GUILayout.Label($"{name}");
               } else if (row is RealAntennaDigital antenna) {
                 UnityEngine.GUILayout.Label($"{antenna.Name} -> {antenna.Target}");
               }
@@ -112,7 +124,9 @@ namespace σκοπός {
           foreach (var row in rows) {
             using (new UnityEngine.GUILayout.HorizontalScope()) {
               if (row is RACommNode node) {
-                UnityEngine.GUILayout.Label($" "); // Padding space.
+                if (UnityEngine.GUILayout.Button(new UnityEngine.GUIContent("Show Links", "Shows only links with one end at this vessel. No effect unless Show network is ticked."))) {
+                  telecom_.main_window_.focused_vessel = node;
+                }
               } else if (row is RealAntennaDigital antenna) {
                 if (!telecom_.main_window_.antenna_inspectors.TryGetValue(
                       antenna, out var inspector)) {

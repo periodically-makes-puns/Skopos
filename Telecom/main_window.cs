@@ -199,6 +199,7 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
   private Telecom telecom_;
   private RoutingStatistics stats_;
   private VesselOverview vessel_overview_;
+  internal RACommNode focused_vessel;
   private string alert_rate_limit_text;
   private string cleanup_days_text;
   private readonly Dictionary<Contracts.Contract, bool> open_contracts_ =
