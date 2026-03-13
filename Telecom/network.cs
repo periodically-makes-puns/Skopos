@@ -57,7 +57,8 @@ namespace σκοπός {
         connections_[node.GetValue("name")].Load(node);
       }
       (CommNet.CommNetScenario.Instance as RACommNetScenario).Network.InvalidateCache();    // Inform RA of changes to the node list.
-      Telecom.Instance?.RegisterFixedUpdateMetric(kerbalism_consumption_metric);
+      Telecom.Instance?.RegisterRefreshMetric(refresh_metric);
+      Telecom.Instance?.RegisterRefreshMetric(kerbalism_consumption_metric);
     }
 
     public void Serialize(ConfigNode node) {
@@ -172,11 +173,9 @@ namespace σκοπός {
       }
     }
 
-    private System.Diagnostics.Stopwatch refresh_watch_ = new System.Diagnostics.Stopwatch();
     public void Refresh() {
       UnityEngine.Profiling.Profiler.BeginSample("Skopos.Network.FixedUpdate");
-      var metrics = Telecom.Instance.runtimeMetrics_;
-      refresh_watch_.Start();
+      refresh_metric.Start();
       UpdateConnections();
       kerbalism_consumption_metric.Start();
       foreach (RealAntennaDigital antenna in routing_.usage.Transmitters()) {
@@ -190,9 +189,7 @@ namespace σκοπός {
         }
       }
       kerbalism_consumption_metric.StopSuccess();
-      refresh_watch_.Stop();
-      metrics.num_iterations_++;
-      metrics.total_runtime_ = refresh_watch_.Elapsed.TotalMilliseconds;
+      refresh_metric.StopSuccess();
       UnityEngine.Profiling.Profiler.EndSample();
     }
     
@@ -202,8 +199,6 @@ namespace σκοπός {
         Telecom.Log("No RA comm network");
         return;
       }
-      routing_.prefer_one_bounce = Telecom.Instance.prefer_one_bounce;
-      routing_.use_apsp_heuristic = Telecom.Instance.use_apsp_heuristic;
       routing_.reset_metric.Start();
       routing_.Reset(
           from station in tx_only_ select station.Comm,
@@ -282,6 +277,7 @@ namespace σκοπός {
         new Dictionary<Contracts.Contract, List<Connection>>();
     public HashSet<Connection> contracted_connections { get; } = new HashSet<Connection>();
 
+    internal PerRefreshMetric refresh_metric = new PerRefreshMetric("Overall Refresh Time");
     internal PerRefreshMetric kerbalism_consumption_metric = new PerRefreshMetric("Kerbalism EC Consumption");
   }
 }

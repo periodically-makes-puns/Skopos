@@ -26,6 +26,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
     }
     using (new UnityEngine.GUILayout.HorizontalScope()) { // the most bootleg table imaginable
       List<PerRefreshMetric> metrics = new List<PerRefreshMetric> { 
+        telecom_.network.refresh_metric,
         telecom_.network.routing_.find_channels_duplex_metric,
         telecom_.network.routing_.find_channels_ptmp_metric,
         telecom_.network.routing_.reset_metric, 
@@ -77,7 +78,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Avg. Calls");
         foreach (PerRefreshMetric metric in metrics) {
-          UnityEngine.GUILayout.Label($"{metric.average_calls_per_fixedupdate:F3}");
+          UnityEngine.GUILayout.Label($"{metric.average_calls_per_refresh:F3}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
@@ -93,15 +94,15 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
-        UnityEngine.GUILayout.Label("Avg. Time Total");
+        UnityEngine.GUILayout.Label("Avg. Time (last 100)");
         foreach (PerRefreshMetric metric in metrics) {
-          UnityEngine.GUILayout.Label($"{short_time_to_string(metric.average_runtime_per_fixedupdate)}");
+          UnityEngine.GUILayout.Label($"{short_time_to_string(metric.average_runtime_last_100_refreshes)}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Last Time Total");
         foreach (PerRefreshMetric metric in metrics) {
-          UnityEngine.GUILayout.Label($"{short_time_to_string(metric.total_runtime_this_fixedupdate)}");
+          UnityEngine.GUILayout.Label($"{short_time_to_string(metric.total_runtime_this_refresh)}");
         }
       }
     }

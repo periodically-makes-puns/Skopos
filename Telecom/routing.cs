@@ -134,17 +134,17 @@ namespace σκοπός {
   public Routing() {
     heuristic = new RoutingPrecompute(this);
     current_network_usage_ = new RoutingNetworkUsage(this);
-    Telecom.Instance?.RegisterFixedUpdateMetric(reset_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(one_hop_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(a_star_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(shortest_path_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(dijkstras_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(link_usage_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(vgv_routing_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(vgv_dijkstras_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(find_channels_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(find_channels_duplex_metric);
-    Telecom.Instance?.RegisterFixedUpdateMetric(find_channels_ptmp_metric);
+    Telecom.Instance?.RegisterRefreshMetric(reset_metric);
+    Telecom.Instance?.RegisterRefreshMetric(one_hop_metric);
+    Telecom.Instance?.RegisterRefreshMetric(a_star_metric);
+    Telecom.Instance?.RegisterRefreshMetric(shortest_path_metric);
+    Telecom.Instance?.RegisterRefreshMetric(dijkstras_metric);
+    Telecom.Instance?.RegisterRefreshMetric(link_usage_metric);
+    Telecom.Instance?.RegisterRefreshMetric(vgv_routing_metric);
+    Telecom.Instance?.RegisterRefreshMetric(vgv_dijkstras_metric);
+    Telecom.Instance?.RegisterRefreshMetric(find_channels_metric);
+    Telecom.Instance?.RegisterRefreshMetric(find_channels_duplex_metric);
+    Telecom.Instance?.RegisterRefreshMetric(find_channels_ptmp_metric);
   }
 
   public void Reset(IEnumerable<RACommNode> tx_only,
@@ -298,25 +298,30 @@ namespace σκοπός {
       NetworkUsage usage,
       out Channel channel) {
     find_channels_metric.Start();
-    if (use_vgv_routing) {
-      var res3 = FindChannelVGV(source, destination, latency_limit, data_rate, usage, out channel);
-      find_channels_metric.StopSuccess();
-      return res3;
+    PointToMultipointAvailability res = Unavailable;
+    channel = null;
+    switch (method) {
+      case RoutingMethod.VGV:
+        res = FindChannelVGV(source, destination, latency_limit, data_rate, usage, out channel);
+        break;
+      case RoutingMethod.ASTAR:
+        res = FindChannelsAPSP(source, destination, latency_limit, data_rate, usage, out channel);
+        break;
+      case RoutingMethod.ONEHOP:
+        if (FindChannelsOneHop(source, destination, latency_limit, data_rate, usage, out channel) == PointToMultipointAvailability.Available) {
+          res = PointToMultipointAvailability.Available;
+          break;
+        }
+        goto case RoutingMethod.DIJKSTRAS; // Fall back to Dijkstra's if this fails.
+      case RoutingMethod.DIJKSTRAS:
+        Channel[] channels;
+        res = FindChannelsDijkstras(source, new[] {destination}, latency_limit, data_rate, usage, out channels);
+        channel = channels[0];
+        break;
+      default:
+        Telecom.Log($"Routing method {method} not any legal method!!");
+        break;
     }
-    if (prefer_one_bounce) {
-      if (FindChannelsOneHop(source, destination, latency_limit, data_rate, usage, out channel) == PointToMultipointAvailability.Available) {
-        find_channels_metric.StopSuccess();
-        return PointToMultipointAvailability.Available;
-      }
-    }
-    if (use_apsp_heuristic) {
-      var res2 = FindChannelsAPSP(source, destination, latency_limit, data_rate, usage, out channel);
-      find_channels_metric.StopSuccess();
-      return res2;
-    }
-    Channel[] channels;
-    var res = FindChannelsDijkstras(source, new[] {destination}, latency_limit, data_rate, usage, out channels);
-    channel = channels[0];
     find_channels_metric.StopSuccess();
     return res;
   }
@@ -333,7 +338,7 @@ namespace σκοπός {
       var res2 = FindChannel(source, destinations[0], latency_limit, data_rate, usage, out channels[0]);
       return res2;
     }
-    if (use_vgv_routing) {
+    if (method == RoutingMethod.VGV) {
       var res3 = FindChannelsVGV(source, destinations, latency_limit, data_rate, usage, out channels);
       find_channels_metric.StopSuccess();
       return res3;
@@ -872,8 +877,8 @@ namespace σκοπός {
     //private ProfilerMarker profiler = new ProfilerMarker("Floyd-Warshall");
 
     public RoutingPrecompute(Routing routing) {
-      Telecom.Instance?.RegisterFixedUpdateMetric(apsp_metric);
-      Telecom.Instance?.RegisterFixedUpdateMetric(vgv_precompute_metric);
+      Telecom.Instance?.RegisterRefreshMetric(apsp_metric);
+      Telecom.Instance?.RegisterRefreshMetric(vgv_precompute_metric);
       routing_ = routing;
     }
 
@@ -1578,13 +1583,11 @@ namespace σκοπός {
     private Routing routing_;
   }
 
-  public bool prefer_one_bounce = false;
-  
-  public bool use_apsp_heuristic = false;
-  
-  public bool use_power_efficient_routing = false;
-  
-  public bool use_vgv_routing = false;
+  public enum RoutingMethod {
+    DIJKSTRAS, ONEHOP, ASTAR, VGV
+  };
+
+  public RoutingMethod method = RoutingMethod.DIJKSTRAS;
 
   private readonly RoutingNetworkUsage current_network_usage_;
 

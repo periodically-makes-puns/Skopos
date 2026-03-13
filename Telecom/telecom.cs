@@ -54,7 +54,7 @@ namespace σκοπός {
       GameEvents.Contract.onContractsLoaded.Add(NotifyContractsLoaded);
       GameEvents.Contract.onContractsLoaded.Add(CleanMaintenanceContracts);
       StartCoroutine(CreateNetwork());
-      RegisterStaticFixedUpdateMetrics();
+      RegisterStaticTimingMetrics();
     }
 
     public void OnDestroy() {
@@ -148,13 +148,13 @@ namespace σκοπός {
       on_contracts_changed_cr_running = false;
     }
 
-    private void RegisterStaticFixedUpdateMetrics() {
-      RegisterFixedUpdateMetric(Service.service_availability_metric);
-      RegisterFixedUpdateMetric(Routing.link_usage_metric);
-      RegisterFixedUpdateMetric(Routing.fake_usage_metric);
+    private void RegisterStaticTimingMetrics() {
+      RegisterRefreshMetric(Service.service_availability_metric);
+      RegisterRefreshMetric(Routing.link_usage_metric);
+      RegisterRefreshMetric(Routing.fake_usage_metric);
     }
 
-    internal void RegisterFixedUpdateMetric(PerRefreshMetric metric) {
+    internal void RegisterRefreshMetric(PerRefreshMetric metric) {
       registered_metrics.Add(metric);
     }
 
@@ -287,16 +287,9 @@ namespace σκοπός {
     [KSPField(isPersistant = true)]
     public bool stop_warp_in_sim_ = true;
     [KSPField(isPersistant = true)]
-    public bool prefer_one_bounce = false;
-    [KSPField(isPersistant = true)]
-    public bool use_apsp_heuristic = false;
-    [KSPField(isPersistant = true)]
-    public bool use_power_efficient_routing = false;
-    [KSPField(isPersistant = true)]
-    public bool use_vgv_routing = false;
+    public Routing.RoutingMethod routing_method_ = Routing.RoutingMethod.DIJKSTRAS;
     private KSP.UI.Screens.ApplicationLauncherButton toolbar_button_;
 
-    internal RuntimeMetrics runtimeMetrics_ = new RuntimeMetrics();
     internal readonly List<PerRefreshMetric> registered_metrics = new List<PerRefreshMetric>();
     internal bool do_refresh = false;
     private double last_refresh_ut = 0;

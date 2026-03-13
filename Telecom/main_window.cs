@@ -27,11 +27,15 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
     if (string.IsNullOrEmpty(cleanup_days_text)) {
       cleanup_days_text = telecom_.contract_cleanup_days_.ToString();
     } // same with this one
+        
+     
 
     using (new UnityEngine.GUILayout.VerticalScope()) {
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         show_network = UnityEngine.GUILayout.Toggle(show_network, "Show network");
         telecom_.stop_warp_in_sim_ = UnityEngine.GUILayout.Toggle(telecom_.stop_warp_in_sim_, "Alerts stop warp in RP-1 sim");
+        vessel_overview_.RenderButton();
+        stats_.RenderButton();
       }
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         UnityEngine.GUILayout.Label("Suppress duplicate SLA alerts within");
@@ -47,27 +51,30 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
         UnityEngine.GUILayout.Label($"days ago ({telecom_.contract_cleanup_days_})");
       }
 
-      using (new UnityEngine.GUILayout.HorizontalScope()) {
-        telecom_.network.routing_.prefer_one_bounce = telecom_.prefer_one_bounce = UnityEngine.GUILayout.Toggle(telecom_.prefer_one_bounce, "Prefer one-bounce connections");
-        UnityEngine.GUILayout.FlexibleSpace();
-        vessel_overview_.RenderButton();
-      }
-
-      using (new UnityEngine.GUILayout.HorizontalScope()) {
-        telecom_.network.routing_.use_apsp_heuristic = telecom_.use_apsp_heuristic = UnityEngine.GUILayout.Toggle(telecom_.use_apsp_heuristic, "Use A* search with Floyd-Warshall heuristic");
-        UnityEngine.GUILayout.FlexibleSpace();
-        // Why two separate locations? Because Routing needs a local copy for testing, but I can only preserve fields in Telecom. So Telecom's copy is authoritative, and it copies it over to Routing.
-        stats_.RenderButton();
-      }
-
-      using (new UnityEngine.GUILayout.HorizontalScope()) {
-        telecom_.network.routing_.use_vgv_routing = telecom_.use_vgv_routing = UnityEngine.GUILayout.Toggle(telecom_.use_vgv_routing, "Use VGV routing");
+      using (new UnityEngine.GUILayout.VerticalScope()) {
+        var classic_tooltip = new UnityEngine.GUIContent("Default routing", "The same routing algorithm as stable Skopos.");
+        if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.DIJKSTRAS, classic_tooltip)) {
+          telecom_.routing_method_ = Routing.RoutingMethod.DIJKSTRAS;
+        }
+        var onehop_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Prefer one-bounce connections", "For simplex/duplex connections, use the minimum-latency connection that only uses one vessel to route the connection, if possible. May yield different results!");
+        if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.ONEHOP, onehop_tooltip)) {
+          telecom_.routing_method_ = Routing.RoutingMethod.ONEHOP;
+        }
+        var astar_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Use A* search", "Requires some precomputation, which can be slow with many vessels. This should yield the same results, but faster.");
+        if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.ASTAR, astar_tooltip)) {
+          telecom_.routing_method_ = Routing.RoutingMethod.ASTAR;
+        }
+        var vgv_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Use VGV routing", "Requires more precomputation, and primarily speeds up broadcast routing compared to A*. This also should yield the same results, but faster.");
+        if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.VGV, vgv_tooltip)) {
+          telecom_.routing_method_ = Routing.RoutingMethod.VGV;
+        }
+        telecom_.network.routing_.method = telecom_.routing_method_;
       }
 
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         UnityEngine.GUILayout.Label($"Contracted connections: {telecom_.network.contracted_connections.Count}");
-        UnityEngine.GUILayout.Label($"Total Runs: {telecom_.runtimeMetrics_.num_iterations_}");
-        UnityEngine.GUILayout.Label($"Average Total Runtime: {telecom_.runtimeMetrics_.AverageFixedUpdateRuntime:F2} ms");
+        UnityEngine.GUILayout.Label($"Total Runs: {telecom_.network.refresh_metric.total_calls}");
+        UnityEngine.GUILayout.Label($"Average Runtime (last 100): {RoutingStatistics.short_time_to_string(telecom_.network.refresh_metric.average_runtime_last_100_refreshes)}");
       }
 
       //using (new UnityEngine.GUILayout.VerticalScope()) {
