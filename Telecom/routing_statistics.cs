@@ -1,9 +1,5 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using RealAntennas;
 
 namespace σκοπός {
 internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindowRenderer {

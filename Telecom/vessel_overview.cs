@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using CommNet;
-using CommNet.Network;
 using RealAntennas;
-using Smooth.Slinq.Collections;
 
 namespace σκοπός {
   internal class VesselOverview : principia.ksp_plugin_adapter.SupervisedWindowRenderer {

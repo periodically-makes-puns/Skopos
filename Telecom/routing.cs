@@ -1,10 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using CommNet;
-using CommNet.Network;
-using ContractConfigurator;
 using RealAntennas;
 using static σκοπός.Routing.PointToMultipointAvailability;
 
