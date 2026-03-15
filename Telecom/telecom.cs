@@ -87,24 +87,15 @@ namespace σκοπός {
     }
 
     private void AddPostUpdateHandler() {
-      if (RACommNetNetwork.Instance?.CommNet?.OnNetworkPostUpdate is Action) {
-        previous_on_network_post_update = RACommNetNetwork.Instance?.CommNet?.OnNetworkPostUpdate;
+      ((RACommNetwork) RACommNetNetwork.Instance.CommNet).NetworkUpdateComplete.Add(PostUpdateHandler);
       }
-      if (!(RACommNetNetwork.Instance?.CommNet is null)) {
-        RACommNetNetwork.Instance.CommNet.OnNetworkPostUpdate = PostUpdateHandler;
-      }
-    }
 
     private void PostUpdateHandler() {
-      //const double MIN_UPDATE_INTERVAL = 0.1;
-      if (previous_on_network_post_update is Action) previous_on_network_post_update();
-      else {
-        double now = Planetarium.GetUniversalTime();
-        if (last_refresh_ut <= now) {
+      if ( ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT > last_update_ut) {
           do_refresh = true;
+        last_update_ut = ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT;
         }
       }
-    }
 
     private IEnumerator CreateNetwork() {
       while (RACommNetScenario.RACN == null || !CommNet.CommNetNetwork.Initialized) {
@@ -230,12 +221,11 @@ namespace σκοπός {
       }
       
       if (do_refresh) {
+        do_refresh = false; // Unset now so that it can reset if RA updates while we're working.
         foreach (PerRefreshMetric metric in registered_metrics) {
           metric.StartRefresh();
         }
         network?.Refresh();
-        last_refresh_ut = ut_;
-        do_refresh = false;
       }
     }
 
@@ -294,7 +284,6 @@ namespace σκοπός {
 
     internal readonly List<PerRefreshMetric> registered_metrics = new List<PerRefreshMetric>();
     internal bool do_refresh = false;
-    private double last_refresh_ut = 0;
-    private Action previous_on_network_post_update = null;
+    private double last_update_ut;
   }
 }
