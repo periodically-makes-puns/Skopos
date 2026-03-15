@@ -91,9 +91,9 @@ namespace σκοπός {
     }
 
     private void PostUpdateHandler() {
-      if ( ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT > last_update_ut) {
-        do_refresh = true;
-        last_update_ut = ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT;
+      if ( ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT > last_update_ut_) {
+        do_refresh_ = true;
+        last_update_ut_ = ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT;
       }
     }
 
@@ -220,8 +220,8 @@ namespace σκοπός {
         ut_ = Planetarium.GetUniversalTime();
       }
       
-      if (do_refresh) {
-        do_refresh = false; // Unset now so that it can reset if RA updates while we're working.
+      if (do_refresh_) {
+        do_refresh_ = false; // Unset now so that it can reset if RA updates while we're working.
         foreach (PerRefreshMetric metric in registered_metrics) {
           metric.StartRefresh();
         }
@@ -283,7 +283,7 @@ namespace σκοπός {
     private KSP.UI.Screens.ApplicationLauncherButton toolbar_button_;
 
     internal readonly List<PerRefreshMetric> registered_metrics = new List<PerRefreshMetric>();
-    internal bool do_refresh = false;
-    private double last_update_ut;
+    internal bool do_refresh_ = false;
+    private double last_update_ut_;
   }
 }
