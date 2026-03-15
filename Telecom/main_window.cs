@@ -52,19 +52,23 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
       }
 
       using (new UnityEngine.GUILayout.VerticalScope()) {
-        var classic_tooltip = new UnityEngine.GUIContent("Default routing", "The same routing algorithm as stable Skopos.");
+        var classic_tooltip = new UnityEngine.GUIContent("Default routing", 
+          "The same routing algorithm as stable Skopos. Each connection chooses the route with minimum latency that satisties the minimum data rate, using Dijkstra's algorithm.");
         if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.DIJKSTRAS, classic_tooltip)) {
           telecom_.routing_method_ = Routing.RoutingMethod.DIJKSTRAS;
         }
-        var onehop_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Prefer one-bounce connections", "For simplex/duplex connections, use the minimum-latency connection that only uses one vessel to route the connection, if possible. May yield different results!");
+        var onehop_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Prefer one-bounce connections", 
+          "For simplex/duplex connections, instead use the minimum-latency connection that only uses one vessel (\"one hop\") to route the connection, if possible. May yield different results!");
         if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.ONEHOP, onehop_tooltip)) {
           telecom_.routing_method_ = Routing.RoutingMethod.ONEHOP;
         }
-        var astar_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Use A* search", "Requires some precomputation, which can be slow with many vessels. This should yield the same results, but faster.");
+        var astar_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Use A* search", 
+          "Precompute the best possible shortest path between all vessels/ground stations, and use that to speed up Dijkstra's algorithm for simplex/duplex connections.\n\nRequires some precomputation, which worsens the more vessels there are. This should yield identical results.");
         if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.ASTAR, astar_tooltip)) {
           telecom_.routing_method_ = Routing.RoutingMethod.ASTAR;
         }
-        var vgv_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Use VGV routing", "Requires more precomputation, and primarily speeds up broadcast routing compared to A*. This also should yield the same results, but faster.");
+        var vgv_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Use VGV routing", 
+          "Precompute relaying links (Vessel -> Ground station -> Vessel) and use that to unlink ground stations from the search graph, speeding up Dijkstra's and A*.\n\nRequires some precomputation, which worsens substantially the more vessels and ground stations there are. This should yield identical results.");
         if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.VGV, vgv_tooltip)) {
           telecom_.routing_method_ = Routing.RoutingMethod.VGV;
         }

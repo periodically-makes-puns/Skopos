@@ -111,7 +111,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
   }
 
   public void RenderButton() {
-    if (UnityEngine.GUILayout.Button("Runtime Details…")) {
+    if (UnityEngine.GUILayout.Button(new UnityEngine.GUIContent("Runtime Breakdown", "Runtime profiling for various segments of the routing algorithm. For use if you run into weird performance issues."))) {
       Toggle();
     }
   }

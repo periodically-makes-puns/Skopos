@@ -338,12 +338,12 @@ namespace σκοπός {
       var res2 = FindChannel(source, destinations[0], latency_limit, data_rate, usage, out channels[0]);
       return res2;
     }
+    find_channels_metric.Start();
     if (method == RoutingMethod.VGV) {
       var res3 = FindChannelsVGV(source, destinations, latency_limit, data_rate, usage, out channels);
       find_channels_metric.StopSuccess();
       return res3;
     }
-    find_channels_metric.Start();
     var res = FindChannelsDijkstras(source, destinations, latency_limit, data_rate, usage, out channels);
     find_channels_metric.StopSuccess();
     return res;

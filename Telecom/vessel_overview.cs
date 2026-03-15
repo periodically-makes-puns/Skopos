@@ -25,6 +25,8 @@ namespace σκοπός {
 
       double total_spectrum_usage = 0;
       double total_normalised_power_usage = 0;
+      Dictionary<RACommNode, double> power_usage = new Dictionary<RACommNode, double>();
+      Dictionary<RACommNode, double> max_power_usage = new Dictionary<RACommNode, double>();
        
       foreach (var antenna_group in node_grouped_antennas) {
         RACommNode node = (RACommNode) antenna_group.Key;
@@ -33,8 +35,12 @@ namespace σκοπός {
         if (!open_vessels_.TryGetValue(node, out res)) {
           open_vessels_[node] = false;
         }
+        double this_power_usage = antenna_group.Select(antenna => telecom_.network.routing_.usage.TxPowerUsage(antenna) * antenna.PowerDrawLinear * 1e-3).Sum();
+        double this_max_power_usage = antenna_group.Select(antenna => antenna.PowerDrawLinear * 1e-3).Sum();
+        power_usage.Add(node, this_power_usage);
+        max_power_usage.Add(node, this_max_power_usage);
         total_spectrum_usage += antenna_group.Select(antenna => telecom_.network.routing_.usage.SpectrumUsage(antenna)).Sum();
-        total_normalised_power_usage += antenna_group.Select(antenna => telecom_.network.routing_.usage.TxPowerUsage(antenna)).Sum();
+        total_normalised_power_usage += antenna_group.Select(antenna => telecom_.network.routing_.usage.TxPowerUsage(antenna)).Sum();;
         if (res) {
           foreach (RealAntennaDigital antenna in antenna_group.OrderBy(antenna => $"{antenna.Name} -> {antenna.Target}")) {
             rows.Add(antenna);
@@ -100,7 +106,7 @@ namespace σκοπός {
           foreach (var row in rows) {
             using (new UnityEngine.GUILayout.HorizontalScope()) {
               if (row is RACommNode node) {
-                UnityEngine.GUILayout.Label($" "); // Padding space.
+                UnityEngine.GUILayout.Label($"{RATools.PrettyPrint(power_usage[node])}W /");
               } else if (row is RealAntennaDigital antenna) {
                 UnityEngine.GUILayout.FlexibleSpace();
                 UnityEngine.GUILayout.Label($"{RATools.PrettyPrint(antenna.PowerDrawLinear * 1e-3 * telecom_.network.routing_.usage.TxPowerUsage(antenna))}W /");
@@ -112,7 +118,7 @@ namespace σκοπός {
           foreach (var row in rows) {
             using (new UnityEngine.GUILayout.HorizontalScope()) {
               if (row is RACommNode node) {
-                UnityEngine.GUILayout.Label($" "); // Padding space.
+                UnityEngine.GUILayout.Label($"{RATools.PrettyPrint(max_power_usage[node])}W");
               } else if (row is RealAntennaDigital antenna) {
                 UnityEngine.GUILayout.FlexibleSpace();
                 UnityEngine.GUILayout.Label($"{RATools.PrettyPrint(antenna.PowerDrawLinear * 1e-3)}W");
@@ -144,7 +150,7 @@ namespace σκοπός {
     }
 
     public void RenderButton() {
-      if (UnityEngine.GUILayout.Button("Vessel Overview")) {
+      if (UnityEngine.GUILayout.Button(new UnityEngine.GUIContent("Vessel Overview", "A summary of all vessels being used by Skopos. Also contains filtering options for Show network."))) {
         Toggle();
       }
     }

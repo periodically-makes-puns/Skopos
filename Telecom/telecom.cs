@@ -88,14 +88,14 @@ namespace σκοπός {
 
     private void AddPostUpdateHandler() {
       ((RACommNetwork) RACommNetNetwork.Instance.CommNet).NetworkUpdateComplete.Add(PostUpdateHandler);
-      }
+    }
 
     private void PostUpdateHandler() {
       if ( ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT > last_update_ut) {
-          do_refresh = true;
+        do_refresh = true;
         last_update_ut = ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT;
-        }
       }
+    }
 
     private IEnumerator CreateNetwork() {
       while (RACommNetScenario.RACN == null || !CommNet.CommNetNetwork.Initialized) {
