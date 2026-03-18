@@ -51,19 +51,29 @@ namespace σκοπός {
         public double power ;
       }
 
-      public double power { get; private set; } = 0;
+      private double power_ = 0;
+      private double fake_power_ = 0;
+      public double power => power_ + fake_power_;
 
-      public void AddUsages(SingleUsage[] broadcast, double multiplier = 1, bool fake = false) {
-        power += (from usage in broadcast select usage.power).Max() * multiplier;
+      public void AddUsages(SingleUsage[] broadcast, bool fake = false) {
+        var delta = (from usage in broadcast select usage.power).Max();
         if (!fake) {
+          power_ += delta;
           usages_.Add(broadcast);
+        } else {
+          fake_power_ += delta;
         }
+      }
+
+      public void ResetFakeChanges() {
+        fake_power_ = 0;
       }
 
       public PowerBreakdown Clone() {
         return new PowerBreakdown{
           usages_ = usages.Select(usages => usages.ToArray()).ToList(),
-          power = power,
+          power_ = power_,
+          fake_power_ = fake_power_
         };
       }
 
@@ -80,20 +90,29 @@ namespace σκοπός {
         public double spectrum ;
       }
 
-      public double spectrum { get; private set; } = 0;
+      private double spectrum_ = 0;
+      private double fake_spectrum_ = 0;
+      public double spectrum => spectrum_ + fake_spectrum_;
 
 
-      public void AddUsages(SingleUsage[] usage, double multiplier = 1, bool fake = false) {
-        spectrum += usage[0].spectrum * multiplier;
+      public void AddUsages(SingleUsage[] usage, bool fake = false) {
         if (!fake) {
+          spectrum_ += usage[0].spectrum;
           usages_.Add(usage);
+        } else {
+          fake_spectrum_ += usage[0].spectrum;
         }
+      }
+
+      public void ResetFakeChanges() {
+        fake_spectrum_ = 0;
       }
 
       public SpectrumBreakdown Clone() {
         return new SpectrumBreakdown{
           usages_ = usages.Select(usages => usages.ToArray()).ToList(),
-          spectrum = spectrum
+          spectrum_ = spectrum_,
+          fake_spectrum_ = fake_spectrum_
         };
       }
 
@@ -199,8 +218,8 @@ namespace σκοπός {
       }
       foreach (OrientedLink link in circuit.backward.links) {
         current_network_usage_.UseLinkNoBroadcast(
-          new SourcedLink(connection, circuit.backward, link),
-          one_way_data_rate);
+            new SourcedLink(connection, circuit.backward, link),
+            one_way_data_rate);
       }
       link_usage_metric.StopSuccess();
     }
@@ -1304,20 +1323,18 @@ namespace σκοπός {
     // FindCircuit needs to act as if the forward links are already being used
     // while routing the backward links.
     // Therefore multiplier modifies the power/spectrum usage, and the fake flag indicates to not save the new usages
-    public void UseLinks(IList<SourcedLink> links,
+    public void UseLinks(IEnumerable<SourcedLink> links,
                          double data_rate,
-                         double multiplier = 1,
                          bool fake = false) {
       EnsureSameTxAntennaAndTL(from sourced in links select sourced.link);
-      UseTxPower(links, data_rate, multiplier, fake);
-      UseSpectrum(links, data_rate, multiplier, fake);
+      UseTxPower(links, data_rate, fake);
+      UseSpectrum(links, data_rate, fake);
     }
 
-    private void UseTxPower(IList<SourcedLink> links,
+    private void UseTxPower(IEnumerable<SourcedLink> links,
                             double data_rate,
-                            double multiplier = 1,
                             bool fake = false) {
-      if (routing_.multiple_tracking_.Contains(links[0].link.tx)) {
+      if (routing_.multiple_tracking_.Contains(links.First().link.tx)) {
         return;
       }
       RealAntennaDigital tx_antenna = links[0].link.tx_antenna;
@@ -1329,23 +1346,14 @@ namespace σκοπός {
                         link = sourced,
                         power = sourced.link.TxPowerUsageFromDataRate(data_rate),
                     }).ToArray();
-      tx_power_usage_[tx_antenna].AddUsages(usages, multiplier, fake);
+      tx_power_usage_[tx_antenna].AddUsages(usages, fake);
     }
 
-    private void UseSpectrum(IList<SourcedLink> links, 
-                            double data_rate,
-                            double multiplier = 1,
-                            bool fake = false) {
-      double usage = links[0].link.SpectrumUsageFromDataRate(data_rate);
-      
-      foreach (var sourced in links.GroupBy(l => l.link.rx_antenna)) { 
-        var usages = (from link in sourced select
-                new SpectrumBreakdown.SingleUsage{
-                    link = link,
-                    kind = SpectrumBreakdown.SingleUsage.Kind.Receive,
-                    spectrum = link.link.SpectrumUsageFromDataRate(data_rate),
-            }).ToArray();
-        RACommNode rx = usages[0].link.link.rx;
+    private void UseSpectrum(IEnumerable<SourcedLink> links, double data_rate, bool fake = false) {
+      double usage = links.First().link.SpectrumUsageFromDataRate(data_rate);
+      foreach (var sourced in links.GroupBy(l => l.link.rx_antenna)) {
+        RACommNode rx = sourced.First().link.rx;
+        RealAntennaDigital rx_antenna = sourced.First().link.rx_antenna;
         if (routing_.multiple_tracking_.Contains(rx)) {
           continue;
         }
@@ -1353,7 +1361,13 @@ namespace σκοπός {
         if (!spectrum_usage_.ContainsKey(rx_antenna)) {
           spectrum_usage_.Add(rx_antenna, new SpectrumBreakdown());
         }
-        spectrum_usage_[rx_antenna].AddUsages(usages, multiplier, fake);
+        spectrum_usage_[rx_antenna].AddUsages(
+            (from link in sourced select
+                new SpectrumBreakdown.SingleUsage{
+                    link = link,
+                    kind = SpectrumBreakdown.SingleUsage.Kind.Receive,
+                    spectrum = usage,
+            }).ToArray(), fake);
       }
       RealAntennaDigital tx_antenna = links[0].link.tx_antenna;
       if (routing_.multiple_tracking_.Contains(links[0].link.tx)) {
@@ -1368,25 +1382,11 @@ namespace σκοπός {
                 link = link,
                 kind = SpectrumBreakdown.SingleUsage.Kind.Transmit,
                 spectrum = usage,
-          }).ToArray(), multiplier, fake);
+          }).ToArray(), fake);
     }
 
-    // Faster version of UseLinks optimized for single links.
-    public void UseLinkNoBroadcast(SourcedLink link, double data_rate, double multiplier = 1, bool fake = false) {
-      if (routing_.multiple_tracking_.Contains(link.link.tx)) {
-        return;
-      }
-      // Tx power
-      RealAntennaDigital tx_antenna = link.link.tx_antenna;
-      if (!tx_power_usage_.ContainsKey(tx_antenna)) {
-        tx_power_usage_.Add(tx_antenna, new PowerBreakdown());
-      }
-      tx_power_usage_[tx_antenna].AddUsages(new [] {
-        new PowerBreakdown.SingleUsage{
-                link = link,
-                power = link.link.TxPowerUsageFromDataRate(data_rate),
-      } }, multiplier, fake);
-
+    // LINQ-free version of UseLinks optimized for single links.
+    public void UseLinkNoBroadcast(SourcedLink link, double data_rate, bool fake = false) {
       double spectrum_usage = link.link.SpectrumUsageFromDataRate(data_rate);
       
       // Rx spectrum
@@ -1400,10 +1400,19 @@ namespace σκοπός {
                   link = link,
                   kind = SpectrumBreakdown.SingleUsage.Kind.Receive,
                   spectrum = spectrum_usage
-        } }, multiplier, fake);
+        } }, fake);
       }
 
-      if (!routing_.multiple_tracking_.Contains(link.link.tx)) {
+      if (!routing_.multiple_tracking_.Contains(link.link.tx)) {// Tx power
+        RealAntennaDigital tx_antenna = link.link.tx_antenna;
+        if (!tx_power_usage_.ContainsKey(tx_antenna)) {
+          tx_power_usage_.Add(tx_antenna, new PowerBreakdown());
+        }
+        tx_power_usage_[tx_antenna].AddUsages(new [] {
+          new PowerBreakdown.SingleUsage{
+                  link = link,
+                  power = link.link.TxPowerUsageFromDataRate(data_rate),
+        } }, fake);
         if (!spectrum_usage_.ContainsKey(link.link.tx_antenna)) {
           spectrum_usage_.Add(tx_antenna, new SpectrumBreakdown());
         }
@@ -1412,7 +1421,21 @@ namespace σκοπός {
                   link = link,
                   kind = SpectrumBreakdown.SingleUsage.Kind.Transmit,
                   spectrum = spectrum_usage
-        } }, multiplier, fake);
+        } }, fake);
+      }
+    }
+
+    public void RemoveFakeLink(SourcedLink link) {
+      RealAntennaDigital rx_antenna = link.link.rx_antenna;
+      if (spectrum_usage_.ContainsKey(rx_antenna)) {
+        spectrum_usage_[rx_antenna].ResetFakeChanges();
+      }
+      RealAntennaDigital tx_antenna = link.link.tx_antenna;
+      if (spectrum_usage_.ContainsKey(tx_antenna)) {
+        spectrum_usage_[tx_antenna].ResetFakeChanges();
+      }
+      if (tx_power_usage_.ContainsKey(tx_antenna)) {
+        tx_power_usage_[tx_antenna].ResetFakeChanges();
       }
     }
 
