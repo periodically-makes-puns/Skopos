@@ -244,7 +244,7 @@ namespace σκοπός {
           from link in channel.links
           group new SourcedLink(connection, channel, link) by link.tx_antenna;
       foreach (var links in links_by_tx_antenna) {
-        current_network_usage_.UseLinks(links.ToList(), data_rate);
+        current_network_usage_.UseLinks(links, data_rate);
       }
     }
     return availability;
