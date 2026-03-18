@@ -51,46 +51,11 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
         UnityEngine.GUILayout.Label($"days ago ({telecom_.contract_cleanup_days_})");
       }
 
-      using (new UnityEngine.GUILayout.VerticalScope()) {
-        var classic_tooltip = new UnityEngine.GUIContent("Default routing", 
-          "The same routing algorithm as stable Skopos. Each connection chooses the route with minimum latency that satisties the minimum data rate, using Dijkstra's algorithm.");
-        if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.DIJKSTRAS, classic_tooltip)) {
-          telecom_.routing_method_ = Routing.RoutingMethod.DIJKSTRAS;
-        }
-        var onehop_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Prefer one-bounce connections", 
-          "For simplex/duplex connections, instead use the minimum-latency connection that only uses one vessel (\"one hop\") to route the connection, if possible. May yield different results!");
-        if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.ONEHOP, onehop_tooltip)) {
-          telecom_.routing_method_ = Routing.RoutingMethod.ONEHOP;
-        }
-        var astar_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Use A* search", 
-          "Precompute the best possible shortest path between all vessels/ground stations, and use that to speed up Dijkstra's algorithm for simplex/duplex connections.\n\nRequires some precomputation, which worsens the more vessels there are. This should yield identical results.");
-        if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.ASTAR, astar_tooltip)) {
-          telecom_.routing_method_ = Routing.RoutingMethod.ASTAR;
-        }
-        var vgv_tooltip = new UnityEngine.GUIContent("[EXPERIMENTAL] Use VGV routing", 
-          "Precompute relaying links (Vessel -> Ground station -> Vessel) and use that to unlink ground stations from the search graph, speeding up Dijkstra's and A*.\n\nRequires some precomputation, which worsens substantially the more vessels and ground stations there are. This should yield identical results.");
-        if (UnityEngine.GUILayout.Toggle(telecom_.routing_method_ == Routing.RoutingMethod.VGV, vgv_tooltip)) {
-          telecom_.routing_method_ = Routing.RoutingMethod.VGV;
-        }
-        telecom_.network.routing_.method = telecom_.routing_method_;
-      }
-
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         UnityEngine.GUILayout.Label($"Contracted connections: {telecom_.network.contracted_connections.Count}");
         UnityEngine.GUILayout.Label($"Total Runs: {telecom_.network.refresh_metric.total_calls}");
-        UnityEngine.GUILayout.Label($"Average Runtime (last 100): {RoutingStatistics.short_time_to_string(telecom_.network.refresh_metric.average_runtime_last_100_refreshes)}");
+        UnityEngine.GUILayout.Label($"Average Runtime: {RoutingStatistics.short_time_to_string(telecom_.network.refresh_metric.average_runtime_post_hysteresis)}");
       }
-
-      //using (new UnityEngine.GUILayout.VerticalScope()) {
-      //  UnityEngine.GUILayout.Label($"Considered links: {Routing.link_stats.considered}");
-      //  UnityEngine.GUILayout.Label($"After Dijkstra filter: {Routing.link_stats.filter1}");
-      //  UnityEngine.GUILayout.Label($"After maxdatarate filter: {Routing.link_stats.filter2}");
-      //  UnityEngine.GUILayout.Label($"After distance filter: {Routing.link_stats.filter3}");
-      //  UnityEngine.GUILayout.Label($"After Rx bandwidth filter: {Routing.link_stats.filter4}");
-      //  UnityEngine.GUILayout.Label($"After Tx power filter: {Routing.link_stats.filter5}");
-      //  UnityEngine.GUILayout.Label($"After Tx bandwidth filter (taken): {Routing.link_stats.taken}");
-      //  UnityEngine.GUILayout.Label($"Maximum priority queue size: {Routing.link_stats.max_pq_size}");
-      //}
 
       var inspected_connections = connection_inspectors_.Keys.ToArray();
       foreach (var inspected_connection in inspected_connections) {

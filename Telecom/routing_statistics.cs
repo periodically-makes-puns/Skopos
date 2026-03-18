@@ -24,6 +24,34 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
       UnityEngine.GUILayout.Label("Please wait for the Σκοπός Telecom network to initialize...");
       return;
     }
+
+    var default_style = principia.ksp_plugin_adapter.Style.DarkToggleButton();
+    var selected_style = principia.ksp_plugin_adapter.Style.LitToggleButton();
+
+    using (new UnityEngine.GUILayout.HorizontalScope()) {
+      var classic_tooltip = new UnityEngine.GUIContent("Default", 
+        "The same routing algorithm as stable Skopos. Each connection chooses the route with minimum latency that satisties the minimum data rate, using Dijkstra's algorithm.");
+      if (UnityEngine.GUILayout.Button(classic_tooltip, telecom_.routing_method_ == Routing.RoutingMethod.DIJKSTRAS ? selected_style : default_style)) {
+        telecom_.routing_method_ = Routing.RoutingMethod.DIJKSTRAS;
+      }
+      var onehop_tooltip = new UnityEngine.GUIContent("One-Hop", 
+        "For simplex/duplex connections, instead use the minimum-latency connection that only uses one vessel (\"one hop\") to route the connection, if possible. May yield different results!");
+      if (UnityEngine.GUILayout.Button(onehop_tooltip, telecom_.routing_method_ == Routing.RoutingMethod.ONEHOP ? selected_style : default_style)) {
+        telecom_.routing_method_ = Routing.RoutingMethod.ONEHOP;
+      }
+      var astar_tooltip = new UnityEngine.GUIContent("FW + A*", 
+        "Precompute the best possible shortest path between all vessels/ground stations, and use that to speed up Dijkstra's algorithm for simplex/duplex connections.\n\nRequires some precomputation, which worsens the more vessels there are. This should yield identical results.");
+      if (UnityEngine.GUILayout.Button(astar_tooltip, telecom_.routing_method_ == Routing.RoutingMethod.ASTAR ? selected_style : default_style)) {
+        telecom_.routing_method_ = Routing.RoutingMethod.ASTAR;
+      }
+      var vgv_tooltip = new UnityEngine.GUIContent("VGV", 
+        "Precompute relaying links (Vessel -> Ground station -> Vessel) and use that to unlink ground stations from the search graph, speeding up Dijkstra's and A*.\n\nRequires some precomputation, which worsens substantially the more vessels and ground stations there are. This should yield identical results.");
+      if (UnityEngine.GUILayout.Button(vgv_tooltip, telecom_.routing_method_ == Routing.RoutingMethod.VGV ? selected_style : default_style)) {
+        telecom_.routing_method_ = Routing.RoutingMethod.VGV;
+      }
+      telecom_.network.routing_.method = telecom_.routing_method_;
+    }
+
     using (new UnityEngine.GUILayout.HorizontalScope()) { // the most bootleg table imaginable
       List<PerRefreshMetric> metrics = new List<PerRefreshMetric> { 
         telecom_.network.refresh_metric,
@@ -44,7 +72,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         telecom_.network.kerbalism_consumption_metric,
         Service.service_availability_metric,
       };
-      metrics = metrics.Where(metric => metric.calls_this_fixedupdate > 0).ToList();
+      metrics = metrics.Where(metric => metric.calls_this_refresh > 0).ToList();
       using (new UnityEngine.GUILayout.VerticalScope()) {
         using (new UnityEngine.GUILayout.HorizontalScope()) {
           UnityEngine.GUILayout.FlexibleSpace();
@@ -84,7 +112,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
       using (new UnityEngine.GUILayout.VerticalScope()) {
         UnityEngine.GUILayout.Label("Calls This Frame");
         foreach (PerRefreshMetric metric in metrics) {
-          UnityEngine.GUILayout.Label($"{metric.calls_this_fixedupdate}");
+          UnityEngine.GUILayout.Label($"{metric.calls_this_refresh}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
@@ -94,9 +122,9 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
-        UnityEngine.GUILayout.Label("Avg. Time (last 100)");
+        UnityEngine.GUILayout.Label("Avg. Time");
         foreach (PerRefreshMetric metric in metrics) {
-          UnityEngine.GUILayout.Label($"{short_time_to_string(metric.average_runtime_last_100_refreshes)}");
+          UnityEngine.GUILayout.Label($"{short_time_to_string(metric.average_runtime_post_hysteresis)}");
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {

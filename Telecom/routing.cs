@@ -1065,7 +1065,7 @@ namespace σκοπός {
       vessel_ordering.Clear();
 
       foreach (RACommNode node in (CommNet.CommNetNetwork.Instance?.CommNet as RACommNetwork).Nodes) {
-        if (node.ParentVessel?.mainBody == home_body && 
+        if ((node.ParentVessel?.mainBody == home_body || node.ParentVessel?.mainBody?.) && 
             node.RAAntennaList.Any(ra => ra.RFBand.ChannelWidth >= bandwidth_filter)) {
           vessel_ordering[node] = vessels.Count;
           vessels.Add(node);
