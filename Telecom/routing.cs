@@ -426,10 +426,9 @@ namespace σκοπός {
     // all of these links (thus at the power needed for the weakest link).
     // Also uses the necessary spectrum on all antennas involved.
     
-    // The multiplier and fake attributes exist for simulation purposes
-    // FindCircuit needs to act as if the forward links are already being used
-    // while routing the backward links.
-    // Therefore multiplier modifies the power/spectrum usage, and the fake flag indicates to not save the new usages
+    // The fake attribute causes the links to 1) not actually save the SingleUsage array
+    // and 2) stores the power/spectrum usage in a separate variable (fake_power/fake_spectrum)
+    // that is added to power/spectrum for routing purposes, and can be removed using RemoveFakeLink.
     public void UseLinks(IEnumerable<SourcedLink> links,
                          double data_rate,
                          bool fake = false) {
