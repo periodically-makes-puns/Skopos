@@ -56,6 +56,7 @@ namespace σκοπός {
     public void OnDestroy() {
       Log("Destroying");
       GameEvents.CommNet.OnNetworkInitialized.Remove(NetworkInitializedNotify);
+      GameEvents.CommNet.OnNetworkInitialized.Remove(AddPostUpdateHandler);
       GameEvents.Contract.onAccepted.Remove(ReloadContractConnections);
       GameEvents.Contract.onFinished.Remove(ReloadContractConnections);    
       GameEvents.Contract.onContractsLoaded.Remove(NotifyContractsLoaded);
@@ -74,9 +75,10 @@ namespace σκοπός {
     }
 
     private void PostUpdateHandler() {
-      if ( ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT > last_update_ut_) {
+      double network_last_ut = ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT;
+      if (network_last_ut > last_update_ut_) {
         do_refresh_ = true;
-        last_update_ut_ = ((RACommNetwork) RACommNetNetwork.Instance.CommNet).LastUpdateUT;
+        last_update_ut_ = network_last_ut;
       }
     }
 
