@@ -165,16 +165,6 @@ namespace σκοπός {
       var metrics = Telecom.Instance.runtimeMetrics_;
       refresh_watch_.Start();
       UpdateConnections();
-      foreach (RealAntennaDigital antenna in routing_.usage.Transmitters()) {
-        if ((antenna?.ParentNode as RACommNode).ParentVessel is Vessel vessel) {
-          Kerbalism.ConsumeResource(
-              vessel,
-              "ElectricCharge",
-              // PowerDrawLinear is in mW, ElectricCharge is in kJ.
-              routing_.usage.TxPowerUsage(antenna) * antenna.PowerDrawLinear * 1e-6 * TimeWarp.fixedDeltaTime,
-              "Σκοπός telecom");
-        }
-      }
       refresh_watch_.Stop();
       ++metrics.num_iterations_;
       metrics.total_runtime_ = refresh_watch_.Elapsed.TotalMilliseconds;
@@ -194,6 +184,19 @@ namespace σκοπός {
       foreach (var connection in connections_.Values) {
         if (contracted_connections.Contains(connection)) {
           connection.AttemptConnection(routing_, this, Telecom.Instance.last_universal_time);
+        }
+      }
+    }
+
+    public void ConsumeElectricCharge() {
+      foreach (RealAntennaDigital antenna in routing_?.usage?.Transmitters()) {
+        if ((antenna?.ParentNode as RACommNode).ParentVessel is Vessel vessel) {
+          Kerbalism.ConsumeResource(
+              vessel,
+              "ElectricCharge",
+              // PowerDrawLinear is in mW, ElectricCharge is in kJ.
+              routing_.usage.TxPowerUsage(antenna) * antenna.PowerDrawLinear * 1e-6 * TimeWarp.fixedDeltaTime,
+              "Σκοπός telecom");
         }
       }
     }

@@ -199,6 +199,7 @@ namespace σκοπός {
         do_refresh_ = false; // Unset now so that it can reset if RA updates while we're working.
         network?.Refresh();
       }
+      network?.ConsumeElectricCharge();
     }
 
     private void LateUpdate() {
