@@ -60,6 +60,7 @@ namespace σκοπός {
     public void OnDestroy() {
       Log("Destroying");
       GameEvents.CommNet.OnNetworkInitialized.Remove(NetworkInitializedNotify);
+      GameEvents.CommNet.OnNetworkInitialized.Remove(AddPostUpdateHandler);
       GameEvents.Contract.onAccepted.Remove(ReloadContractConnections);
       GameEvents.Contract.onFinished.Remove(ReloadContractConnections);    
       GameEvents.Contract.onContractsLoaded.Remove(NotifyContractsLoaded);
@@ -227,6 +228,7 @@ namespace σκοπός {
         }
         network?.Refresh();
       }
+      network?.ConsumeElectricCharge();
     }
 
     private void LateUpdate() {
@@ -284,6 +286,6 @@ namespace σκοπός {
 
     internal readonly List<PerRefreshMetric> registered_metrics = new List<PerRefreshMetric>();
     internal bool do_refresh_ = false;
-    private double last_update_ut_;
+    private double last_update_ut_ = 0;
   }
 }

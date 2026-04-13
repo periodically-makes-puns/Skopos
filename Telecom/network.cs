@@ -58,7 +58,6 @@ namespace σκοπός {
       }
       (CommNet.CommNetScenario.Instance as RACommNetScenario).Network.InvalidateCache();    // Inform RA of changes to the node list.
       Telecom.Instance?.RegisterRefreshMetric(refresh_metric);
-      Telecom.Instance?.RegisterRefreshMetric(kerbalism_consumption_metric);
     }
 
     public void Serialize(ConfigNode node) {
@@ -177,6 +176,12 @@ namespace σκοπός {
       UnityEngine.Profiling.Profiler.BeginSample("Skopos.Network.FixedUpdate");
       refresh_metric.Start();
       UpdateConnections();
+      refresh_metric.StopSuccess();
+      UnityEngine.Profiling.Profiler.EndSample();
+    }
+
+    public void ConsumeElectricCharge() {
+      kerbalism_consumption_metric.StartRefresh();
       kerbalism_consumption_metric.Start();
       foreach (RealAntennaDigital antenna in routing_.usage.Transmitters()) {
         if ((antenna?.ParentNode as RACommNode).ParentVessel is Vessel vessel) {
@@ -189,8 +194,6 @@ namespace σκοπός {
         }
       }
       kerbalism_consumption_metric.StopSuccess();
-      refresh_metric.StopSuccess();
-      UnityEngine.Profiling.Profiler.EndSample();
     }
     
     private void UpdateConnections() {

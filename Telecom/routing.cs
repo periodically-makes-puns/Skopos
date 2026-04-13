@@ -284,7 +284,7 @@ namespace σκοπός {
     fake_usage_metric.Start();
     RoutingNetworkUsage current_usage = (usage != NetworkUsage.None) ? (RoutingNetworkUsage) usage : new RoutingNetworkUsage(this, usage);
     foreach (var link in forward.links) {
-      current_usage.UseLinkNoBroadcast(link.Unsourced(), one_way_data_rate, multiplier: 1, fake: true);
+      current_usage.UseLinkNoBroadcast(link.Unsourced(), one_way_data_rate, fake: true);
     }
     fake_usage_metric.Pause();
     if (FindChannel(destination,
@@ -296,16 +296,16 @@ namespace σκοπός {
         
       fake_usage_metric.Resume();
         foreach (var link in forward.links) {
-          current_usage.UseLinkNoBroadcast(link.Unsourced(), one_way_data_rate, multiplier: -1, fake: true);
+          current_usage.RemoveFakeLink(link.Unsourced());
         }
         fake_usage_metric.StopSuccess();
       return null;
     }
     fake_usage_metric.Resume();
     foreach (var link in forward.links) {
-        current_usage.UseLinkNoBroadcast(link.Unsourced(), one_way_data_rate, multiplier: -1, fake: true);
-      }
-      fake_usage_metric.StopSuccess();
+      current_usage.RemoveFakeLink(link.Unsourced());
+    }
+    fake_usage_metric.StopSuccess();
     return new Circuit(forward, backward);
   }
 
@@ -1084,7 +1084,7 @@ namespace σκοπός {
       vessel_ordering.Clear();
 
       foreach (RACommNode node in (CommNet.CommNetNetwork.Instance?.CommNet as RACommNetwork).Nodes) {
-        if ((node.ParentVessel?.mainBody == home_body || node.ParentVessel?.mainBody?.) && 
+        if ((node.ParentVessel?.mainBody == home_body) && 
             node.RAAntennaList.Any(ra => ra.RFBand.ChannelWidth >= bandwidth_filter)) {
           vessel_ordering[node] = vessels.Count;
           vessels.Add(node);
@@ -1337,7 +1337,7 @@ namespace σκοπός {
       if (routing_.multiple_tracking_.Contains(links.First().link.tx)) {
         return;
       }
-      RealAntennaDigital tx_antenna = links[0].link.tx_antenna;
+      RealAntennaDigital tx_antenna = links.First().link.tx_antenna;
       if (!tx_power_usage_.ContainsKey(tx_antenna)) {
         tx_power_usage_.Add(tx_antenna, new PowerBreakdown());
       }
@@ -1357,7 +1357,6 @@ namespace σκοπός {
         if (routing_.multiple_tracking_.Contains(rx)) {
           continue;
         }
-        RealAntennaDigital rx_antenna = usages[0].link.link.rx_antenna;
         if (!spectrum_usage_.ContainsKey(rx_antenna)) {
           spectrum_usage_.Add(rx_antenna, new SpectrumBreakdown());
         }
@@ -1369,8 +1368,8 @@ namespace σκοπός {
                     spectrum = usage,
             }).ToArray(), fake);
       }
-      RealAntennaDigital tx_antenna = links[0].link.tx_antenna;
-      if (routing_.multiple_tracking_.Contains(links[0].link.tx)) {
+      RealAntennaDigital tx_antenna = links.First().link.tx_antenna;
+      if (routing_.multiple_tracking_.Contains(links.First().link.tx)) {
         return;
       }
       if (!spectrum_usage_.ContainsKey(tx_antenna)) {
