@@ -209,8 +209,10 @@ namespace σκοπός {
           from station in stations_.Values select station.Comm);
       routing_.reset_metric.StopSuccess();
       
-      foreach (var connection in contracted_connections) {
-        connection.AttemptConnection(routing_, this, Telecom.Instance.last_universal_time);
+      foreach (var connection in connections_) {
+        if (contracted_connections.Contains(connection)) {
+          connection.AttemptConnection(routing_, this, Telecom.Instance.last_universal_time);
+        }
       }
     }
 
