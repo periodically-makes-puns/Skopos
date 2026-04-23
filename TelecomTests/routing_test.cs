@@ -450,7 +450,6 @@ public class RoutingTest {
     antenna.LoadFromConfigNode(antenna_config);
     node.RAAntennaList.Add(antenna);
     nodes.Add(node);
-    routing_.heuristic.OverrideNodes(nodes);
     return node;
   }
 
