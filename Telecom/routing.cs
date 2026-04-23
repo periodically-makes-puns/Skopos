@@ -271,14 +271,7 @@ namespace σκοπός {
       double data_rate,
       NetworkUsage usage,
       out Channel[] channels) {
-    if (prefer_one_bounce && destinations.Count == 1) {
-      Channel ans;
-      if (FindChannelsOneHop(source, destinations[0], latency_limit, data_rate, usage, out ans) == PointToMultipointAvailability.Available) {
-        channels = new Channel[1] {ans};
-        return PointToMultipointAvailability.Available;
-      }
-    }
-    if (use_apsp_heuristic && destinations.Count == 1) {
+    if (destinations.Count == 1) {
       channels = new Channel[1] {null};
       return FindChannelsAPSP(source, destinations[0], latency_limit, data_rate, usage, out channels[0]);
     }
@@ -409,11 +402,9 @@ namespace σκοπός {
     a_star_metric.Pause();
     heuristic.GenerateShortestPaths();
     a_star_metric.Resume();
-    //var metrics = Telecom.Instance.runtimeMetrics_;
-    //metrics.apsp_routes++;
+
     // Dijkstra’s algorithm without DecreaseKey.
     distances[source] = heuristic.GetHeuristicDistance(source, destination);
-    //Telecom.Log($"{source.displayName} -> {destination.displayName} heuristic distance: {distances[source]}");
     boundary.Enqueue(source, distances[source]);
     previous[source] = null;
     channel = new Channel();
@@ -473,7 +464,6 @@ namespace σκοπός {
         previous[rx] = link;
         boundary.Enqueue(rx, tentative_distance);
         if (rx == destination) latency_distance = tentative_distance; // Don't consider any links with no chance of improving our current solution.
-        //metrics.apsp_links_considered++;
       }
     }
     channel = null;
@@ -518,63 +508,8 @@ namespace σκοπός {
     return PointToMultipointAvailability.Available;
   }
 
-  private PointToMultipointAvailability FindChannelsOneHop(
-      RACommNode source,
-      RACommNode destination,
-      double latency_limit,
-      double data_rate,
-      NetworkUsage usage,
-      out Channel channel) {
-    one_hop_metric.Start();
-    const double c = 299792458;
-    double latency_distance = c * latency_limit;
-    channel = new Channel();
-    double best_distance = latency_distance;
-    foreach (RACommNode relay in source.Keys) {
-      if (relay.TryGetValue(destination, out var outbound)) {
-        OrientedLink outbound_link = OrientedLink.Get(this, from: relay, to: destination);
-        if (outbound_link.max_data_rate < data_rate) {
-          continue;
-        }
-
-        OrientedLink inbound_link = OrientedLink.Get(this, from: source, to: relay);
-        if (inbound_link.max_data_rate < data_rate) {
-          continue;
-        }
-
-        double distance = outbound_link.length + inbound_link.length;
-        if (distance > best_distance) {
-          continue;
-        }
-
-        if (!outbound_link.CheckCapacityWithUsage(usage, data_rate)) {
-          continue;
-        }
-
-        if (!inbound_link.CheckCapacityWithUsage(usage, data_rate)) {
-          continue;
-        }
-
-        best_distance = distance;
-        channel.links.Clear();
-        channel.links.Add(inbound_link);
-        channel.links.Add(outbound_link);
-      }
-    }
-    if (best_distance < latency_distance) {
-      one_hop_metric.StopSuccess();
-      return PointToMultipointAvailability.Available;
-    } else {
-      channel = null;
-      one_hop_metric.StopFailure();
-      return PointToMultipointAvailability.Unavailable;
-    }
-  }
-
   public class RoutingPrecompute {
     // All-pairs shortest paths
-    //private ProfilerMarker profiler = new ProfilerMarker("Floyd-Warshall");
-
     public RoutingPrecompute() {
       Telecom.Instance.RegisterFixedUpdateMetric(apsp_metric);
     }
@@ -607,9 +542,6 @@ namespace σκοπός {
       if (cached) return;
       apsp_metric.Start();
       if (nodes.Count == 0) FindNodes();
-      //profiler.Begin();
-      
-      //Telecom.Log($"Found {nodes.Count} relevant stations and vessels.");
 
       int N = nodes.Count;
       shortest_path = new double[N, N];
@@ -645,14 +577,12 @@ namespace σκοπός {
         }
       }
       cached = true;
-      //profiler.End();
       apsp_metric.StopSuccess();
     }
     public double GetHeuristicDistance(RACommNode tx, RACommNode rx) {
       if (ordering.TryGetValue(tx, out int i) && ordering.TryGetValue(rx, out int j)) {
         return shortest_path[i, j];   
       }
-      //Telecom.Log($"{tx.displayName} -> {rx.displayName} not in network!!");
       return double.PositiveInfinity; // This is not in our "good" node network!
     }
 
@@ -943,11 +873,7 @@ namespace σκοπός {
 
     private Routing routing_;
   }
-
-  public bool prefer_one_bounce = false;
   
-  public bool use_apsp_heuristic = true;
-
   private readonly RoutingNetworkUsage current_network_usage_;
 
   private readonly Dictionary<(RACommNode, RACommNode), OrientedLink> links_ =

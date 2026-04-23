@@ -235,10 +235,6 @@ namespace σκοπός {
     internal double max_alert_rate_in_days_ = 0;
     [KSPField(isPersistant = true)]
     public bool stop_warp_in_sim_ = true;
-    [KSPField(isPersistant = true)]
-    public bool prefer_one_bounce = false;
-    [KSPField(isPersistant = true)]
-    public bool use_apsp_heuristic = false;
     private KSP.UI.Screens.ApplicationLauncherButton toolbar_button_;
 
     internal RuntimeMetrics runtimeMetrics_ = new RuntimeMetrics();

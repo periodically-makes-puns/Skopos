@@ -28,22 +28,13 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         show_network = UnityEngine.GUILayout.Toggle(show_network, "Show network");
         telecom_.stop_warp_in_sim_ = UnityEngine.GUILayout.Toggle(telecom_.stop_warp_in_sim_, "Alerts stop warp in RP-1 sim");
+        stats_.RenderButton();
       }
       using (new UnityEngine.GUILayout.HorizontalScope()) {
         UnityEngine.GUILayout.Label("Suppress duplicate SLA alerts within");
         alert_rate_limit_text = UnityEngine.GUILayout.TextField(alert_rate_limit_text);
         double.TryParse(alert_rate_limit_text, out telecom_.max_alert_rate_in_days_);
         UnityEngine.GUILayout.Label($"days ({telecom_.max_alert_rate_in_days_})");
-      }
-
-      using (new UnityEngine.GUILayout.HorizontalScope()) {
-        telecom_.network.routing_.prefer_one_bounce = telecom_.prefer_one_bounce = UnityEngine.GUILayout.Toggle(telecom_.prefer_one_bounce, "Prefer one-bounce connections");
-      }
-
-      using (new UnityEngine.GUILayout.HorizontalScope()) {
-        telecom_.network.routing_.use_apsp_heuristic = telecom_.use_apsp_heuristic = UnityEngine.GUILayout.Toggle(telecom_.use_apsp_heuristic, "Use A* search with Floyd-Warshall heuristic");
-        // Why two separate locations? Because Routing needs a local copy for testing, but I can only preserve fields in Telecom. So Telecom's copy is authoritative, and it copies it over to Routing.
-        stats_.RenderButton();
       }
 
       using (new UnityEngine.GUILayout.HorizontalScope()) {

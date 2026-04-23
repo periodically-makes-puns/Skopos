@@ -54,7 +54,7 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         }
       }
       using (new UnityEngine.GUILayout.VerticalScope()) {
-        UnityEngine.GUILayout.Label("Avg. Calls", principia.ksp_plugin_adapter.Style.Error(UnityEngine.GUI.skin.label));
+        UnityEngine.GUILayout.Label("Avg. Calls", UnityEngine.GUI.skin.label);
         foreach (FixedUpdateMetric metric in metrics) {
           UnityEngine.GUILayout.Label($"{metric.average_calls_per_fixedupdate:F2}");
         }
