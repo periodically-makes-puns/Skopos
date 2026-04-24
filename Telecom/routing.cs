@@ -1609,7 +1609,7 @@ namespace σκοπός {
     DIJKSTRAS, ONEHOP, ASTAR, VGV
   };
 
-  public RoutingMethod method = RoutingMethod.DIJKSTRAS;
+  public RoutingMethod method = RoutingMethod.ASTAR;
 
   private readonly RoutingNetworkUsage current_network_usage_;
 

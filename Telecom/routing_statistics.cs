@@ -49,7 +49,6 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
       if (UnityEngine.GUILayout.Button(vgv_tooltip, telecom_.routing_method_ == Routing.RoutingMethod.VGV ? selected_style : default_style)) {
         telecom_.routing_method_ = Routing.RoutingMethod.VGV;
       }
-      telecom_.network.routing_.method = telecom_.routing_method_;
     }
 
     using (new UnityEngine.GUILayout.HorizontalScope()) { // the most bootleg table imaginable

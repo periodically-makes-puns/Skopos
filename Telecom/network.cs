@@ -175,6 +175,7 @@ namespace σκοπός {
     public void Refresh() {
       UnityEngine.Profiling.Profiler.BeginSample("Skopos.Network.FixedUpdate");
       refresh_metric.Start();
+      routing_.method = Telecom.Instance.routing_method_;
       UpdateConnections();
       refresh_metric.StopSuccess();
       UnityEngine.Profiling.Profiler.EndSample();
