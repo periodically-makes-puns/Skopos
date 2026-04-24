@@ -281,7 +281,7 @@ namespace σκοπός {
     [KSPField(isPersistant = true)]
     public bool stop_warp_in_sim_ = true;
     [KSPField(isPersistant = true)]
-    public Routing.RoutingMethod routing_method_ = Routing.RoutingMethod.DIJKSTRAS;
+    public Routing.RoutingMethod routing_method_ = Routing.RoutingMethod.ASTAR;
     private KSP.UI.Screens.ApplicationLauncherButton toolbar_button_;
 
     internal readonly List<PerRefreshMetric> registered_metrics = new List<PerRefreshMetric>();
