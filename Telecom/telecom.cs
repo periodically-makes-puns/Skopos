@@ -200,8 +200,7 @@ namespace σκοπός {
         ui.OverrideShownCones.Add(station);
       }
       foreach (Vessel vessel in FlightGlobals.Vessels) {
-        if (vessel?.connection?.Comm is RACommNode node &&
-            (main_window_.focused_vessel is null || node == main_window_.focused_vessel)) {
+        if (vessel?.connection?.Comm is RACommNode node && main_window_.focused_vessel.Contains(node)) {
           ui.OverrideShownCones.Add(node);
         }
       }
@@ -210,7 +209,7 @@ namespace σκοπός {
             (node_a.ParentVessel != null || stations.Contains(node_a)) &&
             link.b is RACommNode node_b &&
             (node_b.ParentVessel != null || stations.Contains(node_b)) &&
-            (main_window_.focused_vessel is null || node_a == main_window_.focused_vessel || node_b == main_window_.focused_vessel)) {
+            (main_window_.focused_vessel.Contains(node_a) || main_window_.focused_vessel.Contains(node_b))) {
           ui.OverrideShownLinks.Add(link);
         }
       }
