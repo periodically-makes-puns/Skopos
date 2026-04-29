@@ -52,7 +52,7 @@ namespace σκοπός {
         UnityEngine.GUILayout.Label($"Total antenna spectrum usage: {RATools.PrettyPrint(total_spectrum_usage)}Hz");
         UnityEngine.GUILayout.Label($"Total (normalized) power usage: {total_normalised_power_usage:P2}");
         if (UnityEngine.GUILayout.Button(new UnityEngine.GUIContent("Reset Link Display", "Show all Skopos links, clearing any filter applied by the Show Links buttons."))) {
-          telecom_.main_window_.focused_vessel = null;
+          telecom_.main_window_.focused_vessel.Clear();
         }
       }
       
@@ -130,8 +130,13 @@ namespace σκοπός {
           foreach (var row in rows) {
             using (new UnityEngine.GUILayout.HorizontalScope()) {
               if (row is RACommNode node) {
-                if (UnityEngine.GUILayout.Button(new UnityEngine.GUIContent("Show Links", "Shows only links with one end at this vessel. No effect unless Show network is ticked."))) {
-                  telecom_.main_window_.focused_vessel = node;
+                string label = telecom_.main_window_.focused_vessel.Contains(node) ? "Hide Links" : "Show Links";
+                if (UnityEngine.GUILayout.Button(new UnityEngine.GUIContent(label, "Shows/hides links with one end at this vessel. No effect unless Show network is ticked."))) {
+                  if (telecom_.main_window_.focused_vessel.Contains(node)) {
+                    telecom_.main_window_.focused_vessel.Remove(node);
+                  } else {
+                    telecom_.main_window_.focused_vessel.Add(node);
+                  }
                 }
               } else if (row is RealAntennaDigital antenna) {
                 if (!telecom_.main_window_.antenna_inspectors.TryGetValue(

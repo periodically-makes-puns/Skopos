@@ -168,7 +168,7 @@ internal class MainWindow : principia.ksp_plugin_adapter.SupervisedWindowRendere
   private Telecom telecom_;
   private RoutingStatistics stats_;
   private VesselOverview vessel_overview_;
-  internal RACommNode focused_vessel;
+  internal readonly HashSet<RACommNode> focused_vessel = new HashSet<RACommNode>();
   private string alert_rate_limit_text;
   private string cleanup_days_text;
   private readonly Dictionary<Contracts.Contract, bool> open_contracts_ =
