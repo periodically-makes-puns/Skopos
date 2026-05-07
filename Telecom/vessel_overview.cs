@@ -68,7 +68,7 @@ namespace σκοπός {
                   return;
                 }
                 string name = node.displayName;
-                if (row == telecom_.main_window_.focused_vessel) {
+                if (telecom_.main_window_.focused_vessel.Contains(row)) {
                   name = $">> {node.displayName} <<";
                 }
                 UnityEngine.GUILayout.Label($"{name}");
