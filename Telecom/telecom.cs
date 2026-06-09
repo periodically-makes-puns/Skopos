@@ -146,7 +146,7 @@ namespace σκοπός {
       RegisterRefreshMetric(Routing.fake_usage_metric);
     }
 
-    internal void RegisterRefreshMetric(PerRefreshMetric metric) {
+    internal void RegisterRefreshMetric(StopwatchMetric metric) {
       registered_metrics.Add(metric);
     }
 
@@ -223,7 +223,7 @@ namespace σκοπός {
       
       if (do_refresh_) {
         do_refresh_ = false; // Unset now so that it can reset if RA updates while we're working.
-        foreach (PerRefreshMetric metric in registered_metrics) {
+        foreach (StopwatchMetric metric in registered_metrics) {
           metric.StartRefresh();
         }
         network?.Refresh();
@@ -287,7 +287,7 @@ namespace σκοπός {
     public Routing.RoutingMethod routing_method_ = Routing.RoutingMethod.ASTAR;
     private KSP.UI.Screens.ApplicationLauncherButton toolbar_button_;
 
-    internal readonly List<PerRefreshMetric> registered_metrics = new List<PerRefreshMetric>();
+    internal readonly List<StopwatchMetric> registered_metrics = new List<StopwatchMetric>();
     internal bool do_refresh_ = false;
     private double last_update_ut_ = 0;
   }

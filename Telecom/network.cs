@@ -283,7 +283,7 @@ namespace σκοπός {
         new Dictionary<Contracts.Contract, List<Connection>>();
     public HashSet<Connection> contracted_connections { get; } = new HashSet<Connection>();
 
-    internal PerRefreshMetric refresh_metric = new PerRefreshMetric("Overall Refresh Time");
-    internal PerRefreshMetric kerbalism_consumption_metric = new PerRefreshMetric("Kerbalism EC Consumption");
+    internal StopwatchMetric refresh_metric = new StopwatchMetric("Overall Refresh Time");
+    internal StopwatchMetric kerbalism_consumption_metric = new StopwatchMetric("Kerbalism EC Consumption");
   }
 }

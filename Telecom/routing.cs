@@ -757,7 +757,7 @@ namespace σκοπός {
     private double[,] shortest_path;
     private int[,] path_forwardtrace;
     private bool cached = false;
-    internal PerRefreshMetric apsp_metric = new PerRefreshMetric("Floyd-Warshall");
+    internal StopwatchMetric apsp_metric = new StopwatchMetric("Floyd-Warshall");
   }
 
   private class LinkUsage {
@@ -972,7 +972,20 @@ namespace σκοπός {
   public class OrientedLink {
     private static readonly Queue<OrientedLink> pool = new Queue<OrientedLink>();
     private static OrientedLink GetFromPool() => pool.Count > 0 ? pool.Dequeue() : new OrientedLink();
+    
+
+    private static int open_links_ = 0;
+    internal static readonly Metric open_link_metric = new Metric("[Oriented Link] Open Links");
+    private static int cache_hits_ = 0;
+    internal static readonly Metric cache_hit_metric = new Metric("[Oriented Link] Cache Hits");
     internal static void ReturnLinks(Routing r) {
+      if (open_links_ > 0) {
+        open_link_metric.Observe(open_links_);
+      }
+      if (cache_hits_ > 0) {
+        cache_hit_metric.Observe(cache_hits_);
+      }
+      open_links_ = cache_hits_ = 0;
       foreach (var link in r.links_.Values) {
         link.Clear();
         pool.Enqueue(link);
@@ -988,6 +1001,9 @@ namespace σκοπός {
         link = GetFromPool();
         link.Set(from, to, ra_link, forward, routing);
         routing.links_.Add((from, to), link);
+        ++open_links_;
+      } else {
+        ++cache_hits_;
       }
       return link;
     }
@@ -1135,16 +1151,16 @@ namespace σκοπός {
   private HashSet<RACommNode> multiple_tracking_ = new HashSet<RACommNode>();
 
   public RoutingPrecompute heuristic;
-  internal PerRefreshMetric reset_metric = new PerRefreshMetric("Reset");
-  internal PerRefreshMetric find_channels_metric = new PerRefreshMetric("Find Channels");
-  internal PerRefreshMetric find_channels_duplex_metric = new PerRefreshMetric("Find Channels (Duplex)");
-  internal PerRefreshMetric find_channels_ptmp_metric = new PerRefreshMetric("Find Channels (PtMP)");
-  internal PerRefreshMetric one_hop_metric = new PerRefreshMetric("One-Hop");
-  internal PerRefreshMetric a_star_metric = new PerRefreshMetric("A*");
-  internal PerRefreshMetric shortest_path_metric = new PerRefreshMetric("Shortest Path");
-  internal PerRefreshMetric dijkstras_metric = new PerRefreshMetric("Dijkstra's");
-  internal static PerRefreshMetric link_usage_metric = new PerRefreshMetric("UseLinks/UseLink");
-  internal static PerRefreshMetric fake_usage_metric = new PerRefreshMetric("Fake UseLinks");
+  internal StopwatchMetric reset_metric = new StopwatchMetric("Reset");
+  internal StopwatchMetric find_channels_metric = new StopwatchMetric("Find Channels");
+  internal StopwatchMetric find_channels_duplex_metric = new StopwatchMetric("Find Channels (Duplex)");
+  internal StopwatchMetric find_channels_ptmp_metric = new StopwatchMetric("Find Channels (PtMP)");
+  internal StopwatchMetric one_hop_metric = new StopwatchMetric("One-Hop");
+  internal StopwatchMetric a_star_metric = new StopwatchMetric("A*");
+  internal StopwatchMetric shortest_path_metric = new StopwatchMetric("Shortest Path");
+  internal StopwatchMetric dijkstras_metric = new StopwatchMetric("Dijkstra's");
+  internal static StopwatchMetric link_usage_metric = new StopwatchMetric("UseLinks/UseLink");
+  internal static StopwatchMetric fake_usage_metric = new StopwatchMetric("Fake UseLinks");
 }
 
 }

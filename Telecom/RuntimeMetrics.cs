@@ -5,8 +5,30 @@ using System.Linq;
 
 namespace σκοπός {
 
-  internal class PerRefreshMetric {
-    public PerRefreshMetric(string name, int hysteresis_factor = 20) { 
+  internal class Metric {
+
+    public Metric(string name, int hysteresis_factor = 20) {
+      this.name = name;
+      hysteresis_factor_ = hysteresis_factor;
+    }
+    
+    // A single data point, taken once every refresh.
+    public void Observe(double obs) {
+      int hysteresis_factor = (observe_count > hysteresis_factor_) ? hysteresis_factor_ : observe_count;
+      average_hysteresis = ((average_hysteresis * hysteresis_factor) + obs) / (hysteresis_factor + 1);
+      total += obs;
+      ++observe_count;
+    }
+    public readonly string name;
+    public double average_hysteresis { get; private set; } = 0;
+    public double total { get; private set; } = 0;
+    public int observe_count { get; private set; } = 0;
+    public double true_average => total / observe_count;
+    private readonly int hysteresis_factor_;
+  }
+
+  internal class StopwatchMetric {
+    public StopwatchMetric(string name, int hysteresis_factor = 20) { 
       this.name = name;
       watch_ = new Stopwatch();  
       hysteresis_factor_ = hysteresis_factor;
