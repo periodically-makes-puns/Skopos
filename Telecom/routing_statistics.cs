@@ -44,11 +44,6 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
       if (UnityEngine.GUILayout.Button(astar_tooltip, telecom_.routing_method_ == Routing.RoutingMethod.ASTAR ? selected_style : default_style)) {
         telecom_.routing_method_ = Routing.RoutingMethod.ASTAR;
       }
-      var vgv_tooltip = new UnityEngine.GUIContent("VGV", 
-        "Precompute relaying links (Vessel -> Ground station -> Vessel) and use that to unlink ground stations from the search graph, speeding up Dijkstra's and A*.\n\nRequires some precomputation, which worsens substantially the more vessels and ground stations there are. This should yield identical results.");
-      if (UnityEngine.GUILayout.Button(vgv_tooltip, telecom_.routing_method_ == Routing.RoutingMethod.VGV ? selected_style : default_style)) {
-        telecom_.routing_method_ = Routing.RoutingMethod.VGV;
-      }
     }
 
     using (new UnityEngine.GUILayout.HorizontalScope()) { // the most bootleg table imaginable
@@ -57,14 +52,11 @@ internal class RoutingStatistics : principia.ksp_plugin_adapter.SupervisedWindow
         telecom_.network.routing_.find_channels_duplex_metric,
         telecom_.network.routing_.find_channels_ptmp_metric,
         telecom_.network.routing_.reset_metric, 
-        telecom_.network.routing_.heuristic.apsp_metric, 
-        telecom_.network.routing_.heuristic.vgv_precompute_metric,
+        telecom_.network.routing_.heuristic.apsp_metric,
         telecom_.network.routing_.one_hop_metric,
         telecom_.network.routing_.shortest_path_metric,
         telecom_.network.routing_.a_star_metric,
-        telecom_.network.routing_.vgv_routing_metric,
         telecom_.network.routing_.dijkstras_metric,
-        telecom_.network.routing_.vgv_dijkstras_metric,
         telecom_.network.routing_.find_channels_metric,
         Routing.link_usage_metric,
         Routing.fake_usage_metric,
